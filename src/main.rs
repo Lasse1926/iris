@@ -1,4 +1,5 @@
-use std::{collections::HashMap, fmt::{self, write}, path::PathBuf};
+use std::{collections::HashMap,fmt, path::PathBuf};
+use std::cell::Cell;
 use eframe::egui;
 use egui::DroppedFile;
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
@@ -22,6 +23,7 @@ fn main() {
 }
 #[derive(Debug)]
 struct ImageWindow {
+    id:usize,
     path:PathBuf,
     name:String,
     open:bool,
@@ -29,6 +31,9 @@ struct ImageWindow {
     color_percent:HashMap<u32,f32>,
     color_gradation:f32,
 }
+
+thread_local!(static WINDOW_ID: Cell<usize> = Cell::new(0));
+
 #[derive(Debug)]
 struct AvarageRgb {
     r:u8,
@@ -83,12 +88,16 @@ impl ImageWindow {
         if path.file_stem().unwrap().to_str().unwrap().to_string().len() >= 10 {
             name = path.file_stem().unwrap().to_str().unwrap().to_string()[0..10].to_string() + "." + &path.extension().unwrap().to_string_lossy()
         }
-        ImageWindow{path,name,open:true,color_percent:HashMap::new(),color_list:HashMap::new(),color_gradation:50.0}
+        WINDOW_ID.with(|thread_id|{
+            let id = thread_id.get();
+            thread_id.set(id+1);
+            ImageWindow{path,name,open:true,color_percent:HashMap::new(),color_list:HashMap::new(),color_gradation:50.0,id}
+        })
     }
     fn show (&mut self,ctx:&egui::Context){
         if self.open{
             let mut window_open = self.open;
-            egui::Window::new(self.name.clone()).open(&mut window_open).show(ctx, |ui| {
+            egui::Window::new(self.name.clone()).id(egui::Id::new(self.id)).open(&mut window_open).show(ctx, |ui| {
                 let string_path = "file://".to_owned() + self.path.to_str().unwrap();
                 ui.add(
                     egui::Image::new(string_path)
@@ -180,9 +189,9 @@ impl eframe::App for MyEguiApp {
         }); 
     }
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
-        
         if raw_input.dropped_files.len() >= 1 {
             for file in raw_input.dropped_files.iter(){
+                println!("dropped files: {:?}",file);
                 if !self.has_image_window(file.path.clone().expect("No Path")){
                     self.image_windows.push(ImageWindow::new(file.clone())); 
                 }
