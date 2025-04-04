@@ -1,7 +1,8 @@
+use std::fmt::Debug;
 use std::{collections::HashMap,fmt, path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
-use egui::DroppedFile;
+use egui::{ColorImage, DroppedFile};
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
 
 fn rgb_distance(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
@@ -34,12 +35,18 @@ struct ImageWindow {
 
 thread_local!(static WINDOW_ID: Cell<usize> = Cell::new(0));
 
-#[derive(Debug)]
 struct AvarageRgb {
     r:u8,
     g:u8,
     b:u8,
     color_n:u32,
+    texture: Option<egui::TextureHandle>,
+}
+
+impl Debug for AvarageRgb {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+       write!(f,"|r: {}|g: {}|b: {} |=> color_n: {}",self.r,self.g,self.b,self.color_n) 
+    }
 }
 
 impl AvarageRgb {
@@ -52,7 +59,7 @@ impl AvarageRgb {
         let g = rgb.channels()[1];
         let b = rgb.channels()[2];
 
-        AvarageRgb {r,g,b,color_n:1}
+        AvarageRgb {r,g,b,color_n:1,texture:None}
     }
     fn avarage(&mut self,comp: &AvarageRgb){
         self.color_n += comp.color_n;
