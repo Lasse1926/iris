@@ -2,8 +2,8 @@ use std::fmt::Debug;
 use std::{collections::HashMap,fmt, path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
-use egui::{ColorImage, DroppedFile};
-use image::{GenericImageView, ImageReader, Pixel, Rgb};
+use egui::{Color32, ColorImage, DroppedFile, Vec2};
+use image::{FlatSamples, GenericImageView, ImageReader, Pixel, Rgb, RgbImage};
 
 fn rgb_distance(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
     let r_a = col_a.channels()[0] as f32;
@@ -105,19 +105,54 @@ impl ImageWindow {
         if self.open{
             let mut window_open = self.open;
             egui::Window::new(self.name.clone()).id(egui::Id::new(self.id)).open(&mut window_open).show(ctx, |ui| {
+
                 let string_path = "file://".to_owned() + self.path.to_str().unwrap();
                 ui.add(
                     egui::Image::new(string_path)
                 ); 
+                egui::CollapsingHeader::new("Colors").show(ui,|ui|{
+                    egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
+                        let aw = ui.available_width();
+                        egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
+                            for (num,(id,c)) in self.color_list.iter().enumerate(){
+                                if let Some(texture) = &c.texture {
+                                    ui.add(
+                                        egui::Image::from_texture(texture)
+                                    );
+                                    println!("{}",(aw/ui.available_width()) as usize);
+                                    if (num+1)%(aw/ui.available_width()) as usize == 0 {
+                                        ui.end_row();
+                                    }
+                                }
+                            }
+                        });
+                    });
+                });
+                egui::CollapsingHeader::new("Color Percentages").show(ui,|ui|{
+                    egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
+                        ui.with_layout(egui::Layout::top_down(egui::Align::TOP).with_cross_justify(true),|ui|{
+                            for (id,c) in self.color_list.iter(){
+                                if let Some(texture) = &c.texture {
+                                    ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
+                                        ui.add(
+                                            egui::Image::from_texture(texture)
+                                        );
+                                        ui.label(format!("{}|{}|{} |=> {}%",c.r,c.g,c.b,self.color_percent[id]*100.0));
+                                    });
+                                }
+                            }
+                        });
+                    });
+                });
                 if ui.add(egui::Button::new("Scan")).clicked(){
-                    self.scan_image();
+                    self.scan_image(ui);
                 }
 
             }); 
             self.open = window_open;
         }
     }    
-    fn scan_image(&mut self){
+    fn scan_image(&mut self,ui:&mut egui::Ui){
         let image = ImageReader::open(self.path.clone()).unwrap().decode().unwrap(); 
         let size = image.width() as f32 * image.height() as f32;
         self.color_percent = HashMap::new();
@@ -138,16 +173,13 @@ impl ImageWindow {
                     }
                 }
                 if !rgb_already_registered{
-
-                    println!("new Color: {:?}",rgb);
                     self.color_percent.insert(self.color_list.len() as u32,1.0/size);
                     self.color_list.insert(self.color_list.len() as u32,AvarageRgb::from_rgb(rgb));
                 }
             }
         }
-        println!("---------------------------------------------------------");
-        for (id,rgb) in self.color_list.iter() {
-            println!("{}|[]|{}",rgb,self.color_percent[&id])
+        for (_id,c) in self.color_list.iter_mut(){
+            c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()))
         }
     }
 }
