@@ -14,8 +14,8 @@ fn rgb_distance(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
     let g_b = col_b.channels()[1] as f32;
     let b_b = col_b.channels()[2] as f32;
 
-    let dist = (r_b - r_a) + (g_b - g_a) + (b_b - b_a);
-    f32::abs(dist)
+    let dist = f32::abs(r_b - r_a) + f32::abs(g_b - g_a) + f32::abs(b_b - b_a);
+    dist
 }
 
 fn main() {
@@ -114,12 +114,11 @@ impl ImageWindow {
                     egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
                         let aw = ui.available_width();
                         egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
-                            for (num,(id,c)) in self.color_list.iter().enumerate(){
+                            for (num,(_id,c)) in self.color_list.iter().enumerate(){
                                 if let Some(texture) = &c.texture {
                                     ui.add(
                                         egui::Image::from_texture(texture)
                                     );
-                                    println!("{}",(aw/ui.available_width()) as usize);
                                     if (num+1)%(aw/ui.available_width()) as usize == 0 {
                                         ui.end_row();
                                     }
@@ -144,6 +143,7 @@ impl ImageWindow {
                         });
                     });
                 });
+                ui.add(egui::Slider::new(&mut self.color_gradation,0.0 ..= 255.0).text("Color Gradation"));
                 if ui.add(egui::Button::new("Scan")).clicked(){
                     self.scan_image(ui);
                 }
@@ -209,7 +209,7 @@ impl MyEguiApp {
 }
 
 impl eframe::App for MyEguiApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             let mut image_window_to_remove:Vec<usize> = vec![];
             for (index,w) in self.image_windows.iter_mut().enumerate(){
@@ -230,7 +230,6 @@ impl eframe::App for MyEguiApp {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         if raw_input.dropped_files.len() >= 1 {
             for file in raw_input.dropped_files.iter(){
-                println!("dropped files: {:?}",file);
                 if !self.has_image_window(file.path.clone().expect("No Path")){
                     self.image_windows.push(ImageWindow::new(file.clone())); 
                 }
