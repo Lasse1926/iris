@@ -20,6 +20,7 @@ struct ImageWindow {
     color_list:HashMap<u32,iris_color::AvarageRgb>,
     color_percent:HashMap<u32,f32>,
     color_gradation:f32,
+    color_dist_type:iris_color::ColorSpace,
 }
 
 thread_local!(static WINDOW_ID: Cell<usize> = Cell::new(0));
@@ -35,7 +36,7 @@ impl ImageWindow {
         WINDOW_ID.with(|thread_id|{
             let id = thread_id.get();
             thread_id.set(id+1);
-            ImageWindow{path,name,open:true,color_percent:HashMap::new(),color_list:HashMap::new(),color_gradation:50.0,id}
+            ImageWindow{path,name,open:true,color_percent:HashMap::new(),color_list:HashMap::new(),color_gradation:50.0,id,color_dist_type:iris_color::ColorSpace::Rgb}
         })
     }
     fn show (&mut self,ctx:&egui::Context){
@@ -80,7 +81,19 @@ impl ImageWindow {
                         });
                     });
                 });
-                ui.add(egui::Slider::new(&mut self.color_gradation,0.0 ..= 255.0).text("Color Gradation"));
+                egui::ComboBox::from_label("Select Color Space for distance")
+                    .selected_text(format!("{:?}", self.color_dist_type))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::Rgb, "RGB");
+                        ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::Lab, "Lab");
+                    }
+                );
+                let color_deg_max:f32;
+                match self.color_dist_type {
+                    iris_color::ColorSpace::Lab => color_deg_max = 200.0,
+                    iris_color::ColorSpace::Rgb => color_deg_max = 500.0,
+                }
+                ui.add(egui::Slider::new(&mut self.color_gradation,0.0 ..= color_deg_max).text("Color Gradation"));
                 if ui.add(egui::Button::new("Scan")).clicked(){
                     self.scan_image(ui);
                 }
@@ -94,12 +107,25 @@ impl ImageWindow {
         let size = image.width() as f32 * image.height() as f32;
         self.color_percent = HashMap::new();
         self.color_list = HashMap::new();
+        let mut max_dist = f32::MIN;
+        let mut min_dist = f32::MAX;
         for (_x,_y,rgba) in image.pixels(){
             if !(rgba.channels()[3]<= 0){
                 let rgb = rgba.to_rgb();
                 let mut rgb_already_registered = false;
                 for (key,value) in self.color_list.iter_mut(){
-                    if iris_color::rgb_distance(value.to_rgb(), rgb) < self.color_gradation{
+                    let dist:f32;
+                    match self.color_dist_type{
+                        iris_color::ColorSpace::Rgb => dist = iris_color::rgb_distance(value.to_rgb(), rgb),
+                        iris_color::ColorSpace::Lab => dist = {
+                            let lab_a = iris_color::LabColor::from_rgb(value.to_rgb());
+                            let lab_b = iris_color::LabColor::from_rgb(rgb);
+                            lab_a.distance_to_Lab(&lab_b)
+                        }
+                    }
+                    max_dist = max_dist.max(dist);
+                    min_dist = min_dist.min(dist);
+                    if dist < self.color_gradation{
                         value.avarage_with_rgb(&rgb);
                         if let Some(percent) = self.color_percent.get_mut(key){
                             *percent += 1.0/size;

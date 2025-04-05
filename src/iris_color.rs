@@ -2,6 +2,12 @@ use std::fmt::Debug;
 use std::fmt;
 use image::{Pixel, Rgb};
 
+#[derive(Debug,PartialEq)]
+pub enum ColorSpace {
+    Rgb,
+    Lab,
+}
+
 pub fn rgb_distance(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
     let r_a = col_a.channels()[0] as f32;
     let g_a = col_a.channels()[1] as f32;
@@ -104,6 +110,13 @@ impl LabColor {
         Self{l,a,b,x:XYZ_D65.x,y:XYZ_D65.y,z:XYZ_D65.z}
     } 
 
+    pub fn distance_to_Lab_squared(&self,comp:&LabColor) -> f32 {
+        (self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)
+    }
+    pub fn distance_to_Lab(&self,comp:&LabColor) -> f32 {
+        ((self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)).sqrt()
+    }
+
     pub fn from_XYZ(xyz:&Vec3) -> Self{
         let mut var_x = xyz.x/XYZ_D65.x;
         let mut var_y = xyz.y/XYZ_D65.y;
@@ -119,6 +132,9 @@ impl LabColor {
 
         Self::new(cie_l,cie_a,cie_b)
     }
+    pub fn from_rgb(rgb:Rgb<u8>)-> Self{
+        Self::from_XYZ(&rgb_to_XYZ(&rgb))
+    }
 }
 
 impl fmt::Display for LabColor {
@@ -127,7 +143,7 @@ impl fmt::Display for LabColor {
     }
 }
 
-pub fn rgb_to_XYZ(rgb:&Rgb<u8>) -> Vec3 {
+pub fn rgb_to_xyz(rgb:&Rgb<u8>) -> Vec3 {
     let mut r = rgb.channels()[0] as f32 /255.0;
     let mut g = rgb.channels()[1] as f32 /255.0;
     let mut b = rgb.channels()[2] as f32 /255.0;
