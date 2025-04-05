@@ -3,20 +3,9 @@ use std::{collections::HashMap,fmt, path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
 use egui::{Color32, ColorImage, DroppedFile, Vec2};
-use image::{FlatSamples, GenericImageView, ImageReader, Pixel, Rgb, RgbImage};
+use image::{GenericImageView, ImageReader, Pixel, Rgb};
 
-fn rgb_distance(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
-    let r_a = col_a.channels()[0] as f32;
-    let g_a = col_a.channels()[1] as f32;
-    let b_a = col_a.channels()[2] as f32;
-
-    let r_b = col_b.channels()[0] as f32;
-    let g_b = col_b.channels()[1] as f32;
-    let b_b = col_b.channels()[2] as f32;
-
-    let dist = f32::abs(r_b - r_a) + f32::abs(g_b - g_a) + f32::abs(b_b - b_a);
-    dist
-}
+mod iris_color;
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
@@ -28,65 +17,13 @@ struct ImageWindow {
     path:PathBuf,
     name:String,
     open:bool,
-    color_list:HashMap<u32,AvarageRgb>,
+    color_list:HashMap<u32,iris_color::AvarageRgb>,
     color_percent:HashMap<u32,f32>,
     color_gradation:f32,
 }
 
 thread_local!(static WINDOW_ID: Cell<usize> = Cell::new(0));
 
-struct AvarageRgb {
-    r:u8,
-    g:u8,
-    b:u8,
-    color_n:u32,
-    texture: Option<egui::TextureHandle>,
-}
-
-impl Debug for AvarageRgb {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-       write!(f,"|r: {}|g: {}|b: {} |=> color_n: {}",self.r,self.g,self.b,self.color_n) 
-    }
-}
-
-impl AvarageRgb {
-    fn to_rgb(&self) -> Rgb<u8>{
-        Rgb::from([self.r,self.g,self.b])
-    }
-    fn from_rgb(rgb:Rgb<u8>) -> Self{
-
-        let r = rgb.channels()[0];
-        let g = rgb.channels()[1];
-        let b = rgb.channels()[2];
-
-        AvarageRgb {r,g,b,color_n:1,texture:None}
-    }
-    fn avarage(&mut self,comp: &AvarageRgb){
-        self.color_n += comp.color_n;
-        self.r += comp.r/self.color_n as u8;
-        self.g += comp.g/self.color_n as u8;
-        self.b += comp.b/self.color_n as u8;
-    }
-
-    fn avarage_with_rgb(&mut self,comp: &Rgb<u8>){
-
-        let r = comp.channels()[0];
-        let g = comp.channels()[1];
-        let b = comp.channels()[2];
-        
-        self.color_n += 1;
-
-        let _ = self.r.checked_add((r as u32/self.color_n) as u8);
-        let _ = self.g.checked_add((g as u32/self.color_n) as u8);
-        let _ = self.b.checked_add((b as u32/self.color_n) as u8);
-    }
-}
-
-impl fmt::Display for AvarageRgb {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f,"({},{},{})",self.r,self.g,self.b)
-    }
-}
 
 impl ImageWindow {
     fn new (new_file:DroppedFile)-> Self{
@@ -162,7 +99,7 @@ impl ImageWindow {
                 let rgb = rgba.to_rgb();
                 let mut rgb_already_registered = false;
                 for (key,value) in self.color_list.iter_mut(){
-                    if rgb_distance(value.to_rgb(), rgb) < self.color_gradation{
+                    if iris_color::rgb_distance(value.to_rgb(), rgb) < self.color_gradation{
                         value.avarage_with_rgb(&rgb);
                         if let Some(percent) = self.color_percent.get_mut(key){
                             *percent += 1.0/size;
@@ -174,7 +111,7 @@ impl ImageWindow {
                 }
                 if !rgb_already_registered{
                     self.color_percent.insert(self.color_list.len() as u32,1.0/size);
-                    self.color_list.insert(self.color_list.len() as u32,AvarageRgb::from_rgb(rgb));
+                    self.color_list.insert(self.color_list.len() as u32,iris_color::AvarageRgb::from_rgb(rgb));
                 }
             }
         }
