@@ -52,13 +52,15 @@ impl ImageWindow {
                     egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
                         let aw = ui.available_width();
                         egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
-                            for (num,(_id,c)) in self.color_list.iter().enumerate(){
-                                if let Some(texture) = &c.texture {
-                                    ui.add(
-                                        egui::Image::from_texture(texture)
-                                    );
-                                    if (num+1)%(aw/ui.available_width()) as usize == 0 {
-                                        ui.end_row();
+                            for (num,(id,c)) in self.color_list.iter().enumerate(){
+                                if self.color_percent[id] >= 0.01{
+                                    if let Some(texture) = &c.texture {
+                                        ui.add(
+                                            egui::Image::from_texture(texture)
+                                        );
+                                        if (num+1)%(aw/ui.available_width()) as usize == 0 {
+                                            ui.end_row();
+                                        }
                                     }
                                 }
                             }
@@ -69,13 +71,15 @@ impl ImageWindow {
                     egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
                         ui.with_layout(egui::Layout::top_down(egui::Align::TOP).with_cross_justify(true),|ui|{
                             for (id,c) in self.color_list.iter(){
-                                if let Some(texture) = &c.texture {
-                                    ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
-                                        ui.add(
-                                            egui::Image::from_texture(texture)
-                                        );
-                                        ui.label(format!("{}|{}|{} |=> {}%",c.r,c.g,c.b,self.color_percent[id]*100.0));
-                                    });
+                                if self.color_percent[id] >= 0.01{
+                                    if let Some(texture) = &c.texture {
+                                        ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
+                                            ui.add(
+                                                egui::Image::from_texture(texture)
+                                            );
+                                            ui.label(format!("{}|{}|{} |=> {}%",c.r,c.g,c.b,self.color_percent[id]*100.0));
+                                        });
+                                    }
                                 }
                             }
                         });
@@ -113,37 +117,47 @@ impl ImageWindow {
             if !(rgba.channels()[3]<= 0){
                 let rgb = rgba.to_rgb();
                 let mut rgb_already_registered = false;
-                for (key,value) in self.color_list.iter_mut(){
-                    let dist:f32;
-                    match self.color_dist_type{
-                        iris_color::ColorSpace::Rgb => dist = iris_color::rgb_distance(value.to_rgb(), rgb),
-                        iris_color::ColorSpace::Lab => dist = {
-                            let lab_a = iris_color::LabColor::from_rgb(value.to_rgb());
-                            let lab_b = iris_color::LabColor::from_rgb(rgb);
-                            lab_a.distance_to_Lab(&lab_b)
+                let mut closest_color_dist:f32 = f32::MAX;
+                let mut closest_color_key:u32 = 0;
+                if self.color_gradation > 0.0 {
+                    for (key,value) in self.color_list.iter_mut(){
+                        let dist:f32;
+                        match self.color_dist_type{
+                            iris_color::ColorSpace::Rgb => dist = iris_color::rgb_distance(value.to_rgb(), rgb),
+                            iris_color::ColorSpace::Lab => dist = {
+                                let lab_a = iris_color::LabColor::from_rgb(value.to_rgb());
+                                let lab_b = iris_color::LabColor::from_rgb(rgb);
+                                lab_a.distance_to_lab(&lab_b)
+                            }
                         }
-                    }
-                    max_dist = max_dist.max(dist);
-                    min_dist = min_dist.min(dist);
-                    if dist < self.color_gradation{
-                        value.avarage_with_rgb(&rgb);
-                        if let Some(percent) = self.color_percent.get_mut(key){
-                            *percent += 1.0/size;
+                        max_dist = max_dist.max(dist);
+                        min_dist = min_dist.min(dist);
+                        if dist < self.color_gradation{
+                            if closest_color_dist > dist {
+                                closest_color_dist = dist;
+                                closest_color_key = *key;
+                            }
+                            rgb_already_registered = true;
                         }
-                        //println!("added + calac new avarage: Added Color :{:?} | old color {:?}",rgb,value);
-                        rgb_already_registered = true;
-                        break;
                     }
                 }
                 if !rgb_already_registered{
                     self.color_percent.insert(self.color_list.len() as u32,1.0/size);
                     self.color_list.insert(self.color_list.len() as u32,iris_color::AvarageRgb::from_rgb(rgb));
+                }else if let Some(value) = self.color_list.get_mut(&closest_color_key){
+                    if self.color_gradation > 0.0 {value.avarage_with_rgb(&rgb);}
+                    if let Some(percent) = self.color_percent.get_mut(&closest_color_key){
+                        *percent += 1.0/size;
+                    }
                 }
             }
         }
-        for (_id,c) in self.color_list.iter_mut(){
-            c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()))
+        for (id,c) in self.color_list.iter_mut(){
+            if self.color_percent[id] >= 0.01{
+                c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()))
+            }
         }
+    //println!("min: {} || max: {}",min_dist,max_dist);
     }
 }
 

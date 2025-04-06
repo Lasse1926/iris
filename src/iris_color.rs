@@ -70,15 +70,20 @@ impl AvarageRgb {
 
     pub fn avarage_with_rgb(&mut self,comp: &Rgb<u8>){
 
-        let r = comp.channels()[0];
-        let g = comp.channels()[1];
-        let b = comp.channels()[2];
-        
+        let new_r = comp.channels()[0] as u32;
+        let new_g = comp.channels()[1] as u32;
+        let new_b = comp.channels()[2] as u32;
+
+        let r = (self.r as u32).pow(2) * self.color_n; 
+        let g = (self.g as u32).pow(2) * self.color_n; 
+        let b = (self.b as u32).pow(2) * self.color_n; 
+
+        self.r = 254.min(((r + new_r.pow(2))/(self.color_n+1)).isqrt())as u8;
+        self.g = 254.min(((g + new_g.pow(2))/(self.color_n+1)).isqrt())as u8;
+        self.b = 254.min(((b + new_b.pow(2))/(self.color_n+1)).isqrt())as u8;
+
         self.color_n += 1;
 
-        let _ = self.r.checked_add((r as u32/self.color_n) as u8);
-        let _ = self.g.checked_add((g as u32/self.color_n) as u8);
-        let _ = self.b.checked_add((b as u32/self.color_n) as u8);
     }
 }
 
@@ -110,14 +115,14 @@ impl LabColor {
         Self{l,a,b,x:XYZ_D65.x,y:XYZ_D65.y,z:XYZ_D65.z}
     } 
 
-    pub fn distance_to_Lab_squared(&self,comp:&LabColor) -> f32 {
+    pub fn distance_to_lab_squared(&self,comp:&LabColor) -> f32 {
         (self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)
     }
-    pub fn distance_to_Lab(&self,comp:&LabColor) -> f32 {
+    pub fn distance_to_lab(&self,comp:&LabColor) -> f32 {
         ((self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)).sqrt()
     }
 
-    pub fn from_XYZ(xyz:&Vec3) -> Self{
+    pub fn from_xyz(xyz:&Vec3) -> Self{
         let mut var_x = xyz.x/XYZ_D65.x;
         let mut var_y = xyz.y/XYZ_D65.y;
         let mut var_z = xyz.z/XYZ_D65.z;
@@ -133,7 +138,7 @@ impl LabColor {
         Self::new(cie_l,cie_a,cie_b)
     }
     pub fn from_rgb(rgb:Rgb<u8>)-> Self{
-        Self::from_XYZ(&rgb_to_XYZ(&rgb))
+        Self::from_xyz(&rgb_to_xyz(&rgb))
     }
 }
 
