@@ -5,7 +5,9 @@ use image::{Pixel, Rgb};
 #[derive(Debug,PartialEq)]
 pub enum ColorSpace {
     Rgb,
-    Lab,
+    CieLab,
+    OkLab,
+    XYZ,
 }
 
 pub fn rgb_distance(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
@@ -93,36 +95,55 @@ impl fmt::Display for AvarageRgb {
     }
 }
 
-pub struct Vec3 {
+pub struct XYZ {
     x:f32,
     y:f32,
     z:f32,
 }
 
-pub const XYZ_D65:Vec3 = Vec3{x:95.047,y:100.0,z:108.883};
+impl XYZ {
+    pub fn from_rgb(rgb:&Rgb<u8>) -> Self {
+        let mut r = rgb.channels()[0] as f32 /255.0;
+        let mut g = rgb.channels()[1] as f32 /255.0;
+        let mut b = rgb.channels()[2] as f32 /255.0;
 
-pub struct LabColor {
+        r = if r > 0.04045 {((r + 0.055)/1.055).powf(2.4)} else {r/12.92};
+        g = if g > 0.04045 {((g + 0.055)/1.055).powf(2.4)} else {g/12.92};
+        b = if b > 0.04045 {((b + 0.055)/1.055).powf(2.4)} else {b/12.92};
+
+        r = r*100.0;
+        g = g*100.0;
+        b = b*100.0;
+
+        let x = r * 0.4124 + g * 0.3576 + b * 0.1805;
+        let y = r * 0.2126 + g * 0.7152 + b * 0.0722;
+        let z = r * 0.0193 + g * 0.1192 + b * 0.9505;
+
+        Self{x,y,z}
+    }
+}
+
+pub const XYZ_D65:XYZ = XYZ{x:95.047,y:100.0,z:108.883};
+
+pub struct CieLab {
     l:f32,
     a:f32,
     b:f32,
-    x:f32,
-    y:f32,
-    z:f32,
 }
 
-impl LabColor {
+impl CieLab {
     pub fn new(l:f32,a:f32,b:f32)-> Self{
-        Self{l,a,b,x:XYZ_D65.x,y:XYZ_D65.y,z:XYZ_D65.z}
+        Self{l,a,b}
     } 
 
-    pub fn distance_to_lab_squared(&self,comp:&LabColor) -> f32 {
+    pub fn distance_to_lab_squared(&self,comp:&CieLab) -> f32 {
         (self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)
     }
-    pub fn distance_to_lab(&self,comp:&LabColor) -> f32 {
+    pub fn distance_to_lab(&self,comp:&CieLab) -> f32 {
         ((self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)).sqrt()
     }
 
-    pub fn from_xyz(xyz:&Vec3) -> Self{
+    pub fn from_xyz(xyz:&XYZ) -> Self{
         let mut var_x = xyz.x/XYZ_D65.x;
         let mut var_y = xyz.y/XYZ_D65.y;
         let mut var_z = xyz.z/XYZ_D65.z;
@@ -138,32 +159,59 @@ impl LabColor {
         Self::new(cie_l,cie_a,cie_b)
     }
     pub fn from_rgb(rgb:Rgb<u8>)-> Self{
-        Self::from_xyz(&rgb_to_xyz(&rgb))
+        Self::from_xyz(&XYZ::from_rgb(&rgb))
     }
 }
 
-impl fmt::Display for LabColor {
+impl fmt::Display for CieLab {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f,"({},{},{})",self.l,self.a,self.b)
     }
 }
 
-pub fn rgb_to_xyz(rgb:&Rgb<u8>) -> Vec3 {
-    let mut r = rgb.channels()[0] as f32 /255.0;
-    let mut g = rgb.channels()[1] as f32 /255.0;
-    let mut b = rgb.channels()[2] as f32 /255.0;
 
-    r = if r > 0.04045 {((r + 0.055)/1.055).powf(2.4)} else {r/12.92};
-    g = if g > 0.04045 {((g + 0.055)/1.055).powf(2.4)} else {g/12.92};
-    b = if b > 0.04045 {((b + 0.055)/1.055).powf(2.4)} else {b/12.92};
+pub struct OkLab{
+    l:f32,
+    a:f32,
+    b:f32,
+}
 
-    r = r*100.0;
-    g = g*100.0;
-    b = b*100.0;
+impl OkLab {
+    pub fn new(l:f32,a:f32,b:f32) -> Self {
+        OkLab{l,a,b}
+    }
+    pub fn from_xyz(xyz:&XYZ) -> Self{
+        let x = xyz.x;
+        let y = xyz.y;
+        let z = xyz.z;
 
-    let x = r * 0.4124 + g * 0.3576 + b * 0.1805;
-    let y = r * 0.2126 + g * 0.7152 + b * 0.0722;
-    let z = r * 0.0193 + g * 0.1192 + b * 0.9505;
+        let mut m_1 = 0.8189330101 * x + 0.3618667424 * y - 0.1288597137 * z;
+        let mut m_2 = 0.0329845436 * x + 0.9293118715 * y + 0.0361456387 * z;
+        let mut m_3 = 0.0482003018 * x + 0.2643662691 * y + 0.6338517070 * z;
 
-    Vec3{x,y,z}
+        m_1 = m_1.powf(1.0/3.0);
+        m_2 = m_2.powf(1.0/3.0);
+        m_3 = m_3.powf(1.0/3.0);
+
+        let l = 0.2104542553 * m_1 + 0.7936177850 * m_2 - 0.0040720468 * m_3;
+        let a = 1.9779984951 * m_1 - 2.4285922050 * m_2 + 0.4505937099 * m_3;
+        let b = 0.0259040371 * m_1 + 0.7827717662 * m_2 - 0.8086757660 * m_3;
+
+        OkLab{l,a,b}
+    }
+    pub fn from_rgb(rgb:&Rgb<u8>) -> Self {
+        Self::from_xyz(&XYZ::from_rgb(&rgb))
+    }
+    pub fn distance_to_lab_squared(&self,comp:&OkLab) -> f32 {
+        (self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)
+    }
+    pub fn distance_to_lab(&self,comp:&OkLab) -> f32 {
+        ((self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)).sqrt()
+    }
+}
+
+impl fmt::Display for OkLab {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f,"({},{},{})",self.l,self.a,self.b)
+    }
 }

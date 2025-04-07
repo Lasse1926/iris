@@ -89,13 +89,16 @@ impl ImageWindow {
                     .selected_text(format!("{:?}", self.color_dist_type))
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::Rgb, "RGB");
-                        ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::Lab, "Lab");
+                        ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::CieLab, "CieLab");
+                        ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::OkLab, "OkLab");
                     }
                 );
                 let color_deg_max:f32;
                 match self.color_dist_type {
-                    iris_color::ColorSpace::Lab => color_deg_max = 200.0,
+                    iris_color::ColorSpace::CieLab => color_deg_max = 200.0,
+                    iris_color::ColorSpace::OkLab => color_deg_max = 6.0,
                     iris_color::ColorSpace::Rgb => color_deg_max = 500.0,
+                    _=> color_deg_max = 0.0,
                 }
                 ui.add(egui::Slider::new(&mut self.color_gradation,0.0 ..= color_deg_max).text("Color Gradation"));
                 if ui.add(egui::Button::new("Scan")).clicked(){
@@ -124,9 +127,15 @@ impl ImageWindow {
                         let dist:f32;
                         match self.color_dist_type{
                             iris_color::ColorSpace::Rgb => dist = iris_color::rgb_distance(value.to_rgb(), rgb),
-                            iris_color::ColorSpace::Lab => dist = {
-                                let lab_a = iris_color::LabColor::from_rgb(value.to_rgb());
-                                let lab_b = iris_color::LabColor::from_rgb(rgb);
+                            iris_color::ColorSpace::CieLab => dist = {
+                                let lab_a = iris_color::CieLab::from_rgb(value.to_rgb());
+                                let lab_b = iris_color::CieLab::from_rgb(rgb);
+                                lab_a.distance_to_lab(&lab_b)
+                            },
+                            iris_color::ColorSpace::XYZ => dist = 0.0,
+                            iris_color::ColorSpace::OkLab => dist = {
+                                let lab_a = iris_color::OkLab::from_rgb(&value.to_rgb());
+                                let lab_b = iris_color::OkLab::from_rgb(&rgb);
                                 lab_a.distance_to_lab(&lab_b)
                             }
                         }
@@ -152,12 +161,12 @@ impl ImageWindow {
                 }
             }
         }
+        //println!("min: {} \n max: {}",min_dist,max_dist);
         for (id,c) in self.color_list.iter_mut(){
             if self.color_percent[id] >= 0.01{
                 c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()))
             }
         }
-    //println!("min: {} || max: {}",min_dist,max_dist);
     }
 }
 
