@@ -21,6 +21,7 @@ struct ImageWindow {
     color_percent:HashMap<u32,f32>,
     color_gradation:f32,
     color_dist_type:iris_color::ColorSpace,
+    color_display_threshhold:f32,
 }
 
 thread_local!(static WINDOW_ID: Cell<usize> = Cell::new(0));
@@ -36,7 +37,7 @@ impl ImageWindow {
         WINDOW_ID.with(|thread_id|{
             let id = thread_id.get();
             thread_id.set(id+1);
-            ImageWindow{path,name,open:true,color_percent:HashMap::new(),color_list:HashMap::new(),color_gradation:50.0,id,color_dist_type:iris_color::ColorSpace::Rgb}
+            ImageWindow{path,name,open:true,color_percent:HashMap::new(),color_list:HashMap::new(),color_gradation:50.0,id,color_dist_type:iris_color::ColorSpace::OkLab,color_display_threshhold:0.01}
         })
     }
     fn show (&mut self,ctx:&egui::Context){
@@ -46,14 +47,14 @@ impl ImageWindow {
 
                 let string_path = "file://".to_owned() + self.path.to_str().unwrap();
                 ui.add(
-                    egui::Image::new(string_path)
+                    egui::Image::new(string_path).shrink_to_fit()
                 ); 
                 egui::CollapsingHeader::new("Colors").show(ui,|ui|{
                     egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
                         let aw = ui.available_width();
                         egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
                             for (num,(id,c)) in self.color_list.iter().enumerate(){
-                                if self.color_percent[id] >= 0.01{
+                                if self.color_percent[id] >= self.color_display_threshhold{
                                     if let Some(texture) = &c.texture {
                                         ui.add(
                                             egui::Image::from_texture(texture)
@@ -67,11 +68,12 @@ impl ImageWindow {
                         });
                     });
                 });
+                ui.add(egui::Slider::new(&mut self.color_display_threshhold,0.0 ..= 1.0).text("Color Display Threshold"));
                 egui::CollapsingHeader::new("Color Percentages").show(ui,|ui|{
                     egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
                         ui.with_layout(egui::Layout::top_down(egui::Align::TOP).with_cross_justify(true),|ui|{
                             for (id,c) in self.color_list.iter(){
-                                if self.color_percent[id] >= 0.01{
+                                if self.color_percent[id] >= self.color_display_threshhold{
                                     if let Some(texture) = &c.texture {
                                         ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
                                             ui.add(
@@ -163,7 +165,7 @@ impl ImageWindow {
         }
         //println!("min: {} \n max: {}",min_dist,max_dist);
         for (id,c) in self.color_list.iter_mut(){
-            if self.color_percent[id] >= 0.01{
+            if self.color_percent[id] >= self.color_display_threshhold{
                 c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()))
             }
         }
