@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::{collections::HashMap,fmt, path::PathBuf};
 use std::cell::Cell;
@@ -22,6 +23,13 @@ struct ImageWindow {
     color_gradation:f32,
     color_dist_type:iris_color::ColorSpace,
     color_display_threshhold:f32,
+    compare_state:CompareState,
+}
+
+#[derive(Debug,PartialEq)]
+enum CompareState {
+    Percentages,
+    Saturation,
 }
 
 thread_local!(static WINDOW_ID: Cell<usize> = Cell::new(0));
@@ -37,7 +45,26 @@ impl ImageWindow {
         WINDOW_ID.with(|thread_id|{
             let id = thread_id.get();
             thread_id.set(id+1);
-            ImageWindow{path,name,open:true,color_percent:HashMap::new(),color_list:HashMap::new(),color_gradation:50.0,id,color_dist_type:iris_color::ColorSpace::OkLab,color_display_threshhold:0.01}
+            let open = true;
+            let color_percent = HashMap::new();
+            let color_list = HashMap::new();
+            let color_gradation = 50.0;
+            let color_dist_type = iris_color::ColorSpace::OkLab;
+            let color_display_threshhold = 0.01;
+            let compare_state = CompareState::Percentages;
+            ImageWindow{
+                path,
+                name,
+                open,
+                color_percent,
+                color_list,
+                color_gradation,
+                id,
+                color_dist_type,
+                color_display_threshhold,
+                compare_state,
+            }
+
         })
     }
     fn show (&mut self,ctx:&egui::Context){
@@ -49,47 +76,7 @@ impl ImageWindow {
                 ui.add(
                     egui::Image::new(string_path).shrink_to_fit()
                 ); 
-                egui::CollapsingHeader::new("Colors").show(ui,|ui|{
-                    egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
-                        let aw = ui.available_width();
-                        egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
-                            let mut column_count = 0;
-                            for (id,c) in self.color_list.iter(){
-                                if self.color_percent[id] >= self.color_display_threshhold{
-                                    if let Some(texture) = &c.texture {
-                                        ui.add(
-                                            egui::Image::from_texture(texture)
-                                        );
-                                        column_count += 1;
-                                        if column_count > (aw/(ui.available_width()+3.0)) as i32 {
-                                            ui.end_row();
-                                            column_count = 0;
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                    });
-                });
-                ui.add(egui::Slider::new(&mut self.color_display_threshhold,0.0 ..= 1.0).text("Color Display Threshold"));
-                egui::CollapsingHeader::new("Color Percentages").show(ui,|ui|{
-                    egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
-                        ui.with_layout(egui::Layout::top_down(egui::Align::TOP).with_cross_justify(true),|ui|{
-                            for (id,c) in self.color_list.iter(){
-                                if self.color_percent[id] >= self.color_display_threshhold{
-                                    if let Some(texture) = &c.texture {
-                                        ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
-                                            ui.add(
-                                                egui::Image::from_texture(texture)
-                                            );
-                                            ui.label(format!("{}|{}|{} |=> {}%",c.r,c.g,c.b,self.color_percent[id]*100.0));
-                                        });
-                                    }
-                                }
-                            }
-                        });
-                    });
-                });
+
                 egui::ComboBox::from_label("Select Color Space for distance")
                     .selected_text(format!("{:?}", self.color_dist_type))
                     .show_ui(ui, |ui| {
@@ -109,6 +96,120 @@ impl ImageWindow {
                 if ui.add(egui::Button::new("Scan")).clicked(){
                     self.scan_image(ui);
                 }
+                ui.separator();
+                egui::ComboBox::from_label("Sorted by")
+                    .selected_text(format!("{:?}", self.compare_state))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.compare_state,CompareState::Percentages , "Percentages");
+                        ui.selectable_value(&mut self.compare_state,CompareState::Saturation , "Saturation");
+                    }
+                );
+                match self.compare_state {
+                    CompareState::Percentages => {  // ----------PERCENTAGE GUI
+                        let mut color_sorted:Vec<_> = self.color_list.iter().collect();
+                        color_sorted.sort_by(|a,b| {
+                            if self.color_percent[a.0] < self.color_percent[b.0] {
+                                return Ordering::Greater;
+                            }else{
+                                return Ordering::Less;
+                            }
+                        });
+                        ui.label("Compare by Percentage");
+                        ui.add(egui::Slider::new(&mut self.color_display_threshhold,0.0 ..= 1.0).text("Color Display Threshold"));
+                        egui::CollapsingHeader::new("Colors").show(ui,|ui|{
+                            egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
+                                let aw = ui.available_width();
+                                egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
+                                    let mut column_count = 0;
+                                    for (id,c) in color_sorted.iter(){
+                                        if self.color_percent[id] >= self.color_display_threshhold{
+                                            if let Some(texture) = &c.texture {
+                                                ui.add(
+                                                    egui::Image::from_texture(texture)
+                                                );
+                                                column_count += 1;
+                                                if column_count > (aw/(ui.available_width()+3.0)) as i32 {
+                                                    ui.end_row();
+                                                    column_count = 0;
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            });
+                        });
+                        egui::CollapsingHeader::new("Color Percentages").show(ui,|ui|{
+                            egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
+                                ui.with_layout(egui::Layout::top_down(egui::Align::TOP).with_cross_justify(true),|ui|{
+                                    for (id,c) in color_sorted.iter(){
+                                        if self.color_percent[id] >= self.color_display_threshhold{
+                                            if let Some(texture) = &c.texture {
+                                                ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
+                                                    ui.add(
+                                                        egui::Image::from_texture(texture)
+                                                    );
+                                                    ui.label(format!("{}|{}|{} |=> {}%",c.r,c.g,c.b,self.color_percent[id]*100.0));
+                                                });
+                                            }
+                                        }
+                                    }
+                                });
+                            });
+                        });
+                    },
+                    CompareState::Saturation => {
+                        ui.label("Compare by Saturation");
+                        ui.add(egui::Slider::new(&mut self.color_display_threshhold,0.0 ..= 1.0).text("Color Display Threshold"));
+                        let mut color_sorted:Vec<_> = self.color_list.iter().collect();
+                        color_sorted.sort_by(|a,b| {
+                            if iris_color::HSL::from_rgb(&a.1.to_rgb()).s < (iris_color::HSL::from_rgb(&b.1.to_rgb()).s) {
+                                return Ordering::Greater;
+                            }else{
+                                return Ordering::Less;
+                            }
+                        });
+                        egui::CollapsingHeader::new("Colors").show(ui,|ui|{
+                            egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
+                                let aw = ui.available_width();
+                                egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
+                                    let mut column_count = 0;
+                                    for (id,c) in &color_sorted{
+                                        if self.color_percent[id] >= self.color_display_threshhold{
+                                            if let Some(texture) = &c.texture {
+                                                ui.add(
+                                                    egui::Image::from_texture(texture)
+                                                );
+                                                column_count += 1;
+                                                if column_count > (aw/(ui.available_width()+3.0)) as i32 {
+                                                    ui.end_row();
+                                                    column_count = 0;
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            });
+                        });
+                        egui::CollapsingHeader::new("Color Percentages").show(ui,|ui|{
+                            egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
+                                ui.with_layout(egui::Layout::top_down(egui::Align::TOP).with_cross_justify(true),|ui|{
+                                    for (id,c) in &color_sorted{
+                                        if self.color_percent[id] >= self.color_display_threshhold{
+                                            if let Some(texture) = &c.texture {
+                                                ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
+                                                    ui.add(
+                                                        egui::Image::from_texture(texture)
+                                                    );
+                                                    ui.label(format!("{}|{}|{} |=> {}%",c.r,c.g,c.b,self.color_percent[id]*100.0));
+                                                });
+                                            }
+                                        }
+                                    }
+                                });
+                            });
+                        });
+                    }
+                }
 
             }); 
             self.open = window_open;
@@ -116,11 +217,12 @@ impl ImageWindow {
     }    
     fn scan_image(&mut self,ui:&mut egui::Ui){
         let image = ImageReader::open(self.path.clone()).unwrap().decode().unwrap(); 
-        let size = image.width() as f32 * image.height() as f32;
+        let size = image.width() as f64 * image.height() as f64;
         self.color_percent = HashMap::new();
         self.color_list = HashMap::new();
         let mut max_dist = f32::MIN;
         let mut min_dist = f32::MAX;
+        let mut transparent_pixels:f64 = 0.0;
         for (_x,_y,rgba) in image.pixels(){
             if !(rgba.channels()[3]<= 0){
                 let rgb = rgba.to_rgb();
@@ -156,21 +258,24 @@ impl ImageWindow {
                     }
                 }
                 if !rgb_already_registered{
-                    self.color_percent.insert(self.color_list.len() as u32,1.0/size);
+                    self.color_percent.insert(self.color_list.len() as u32,(1.0/size)as f32);
                     self.color_list.insert(self.color_list.len() as u32,iris_color::AvarageRgb::from_rgb(rgb));
                 }else if let Some(value) = self.color_list.get_mut(&closest_color_key){
                     if self.color_gradation > 0.0 {value.avarage_with_rgb(&rgb);}
                     if let Some(percent) = self.color_percent.get_mut(&closest_color_key){
-                        *percent += 1.0/size;
+                        *percent += (1.0/size) as f32;
                     }
                 }
+            }else{
+                transparent_pixels += 1.0;
             }
         }
+        for (_,p) in self.color_percent.iter_mut(){
+            *p = ((*p as f64 *size)/(size-transparent_pixels)) as f32
+        }
         //println!("min: {} \n max: {}",min_dist,max_dist);
-        for (id,c) in self.color_list.iter_mut(){
-            if self.color_percent[id] >= self.color_display_threshhold{
-                c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()))
-            }
+        for (_id,c) in self.color_list.iter_mut(){
+            c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()))
         }
     }
 }

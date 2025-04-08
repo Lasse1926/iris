@@ -8,6 +8,7 @@ pub enum ColorSpace {
     CieLab,
     OkLab,
     XYZ,
+    HSL,
 }
 
 pub fn rgb_distance(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
@@ -213,5 +214,50 @@ impl OkLab {
 impl fmt::Display for OkLab {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f,"({},{},{})",self.l,self.a,self.b)
+    }
+}
+
+pub struct HSL {
+    pub h:f32,
+    pub s:f32,
+    pub l:f32,
+}
+
+impl HSL {
+    pub fn new(h:f32,s:f32,l:f32) -> Self {
+        Self{h,s,l}
+    }
+    pub fn from_rgb(rgb:&Rgb<u8>) -> Self {
+        let r = rgb.channels()[0] as f32 /255.0;
+        let g = rgb.channels()[1] as f32 /255.0;
+        let b = rgb.channels()[2] as f32 /255.0;
+
+        let v_max = r.max(g.max(b));
+        let v_min = r.min(g.min(b));
+
+        let mut h = (v_max+v_min) / 2.0;
+        let l = (v_max+v_min) / 2.0;
+
+        if v_max == v_min {
+            return Self{h:0.0,s:0.0,l};
+        }
+        
+        let d = v_max - v_min;
+
+        let s = if l> 0.5 {d/(2.0 - v_max - v_min)} else {b/(v_max+v_min)};
+        if v_max == r {h = (g-b)/d+(if g<b {6.0} else {0.0})};
+        if v_max == g {h = (b-r)/d+2.0};
+        if v_max == b {h = (r-g)/d+4.0};
+
+        h = h/6.0;
+
+        Self{h,s,l}
+    }
+    
+}
+
+impl fmt::Display for HSL {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f,"({},{},{})",self.h,self.s,self.l)
     }
 }
