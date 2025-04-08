@@ -53,14 +53,17 @@ impl ImageWindow {
                     egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
                         let aw = ui.available_width();
                         egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
-                            for (num,(id,c)) in self.color_list.iter().enumerate(){
+                            let mut column_count = 0;
+                            for (id,c) in self.color_list.iter(){
                                 if self.color_percent[id] >= self.color_display_threshhold{
                                     if let Some(texture) = &c.texture {
                                         ui.add(
                                             egui::Image::from_texture(texture)
                                         );
-                                        if (num+1)%(aw/ui.available_width()) as usize == 0 {
+                                        column_count += 1;
+                                        if column_count > (aw/(ui.available_width()+3.0)) as i32 {
                                             ui.end_row();
+                                            column_count = 0;
                                         }
                                     }
                                 }
