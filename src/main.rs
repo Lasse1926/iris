@@ -114,7 +114,6 @@ impl ImageWindow {
                                 return Ordering::Less;
                             }
                         });
-                        ui.label("Compare by Percentage");
                         ui.add(egui::Slider::new(&mut self.color_display_threshhold,0.0 ..= 1.0).text("Color Display Threshold"));
                         egui::CollapsingHeader::new("Colors").show(ui,|ui|{
                             egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
@@ -158,7 +157,6 @@ impl ImageWindow {
                         });
                     },
                     CompareState::Saturation => {
-                        ui.label("Compare by Saturation");
                         ui.add(egui::Slider::new(&mut self.color_display_threshhold,0.0 ..= 1.0).text("Color Display Threshold"));
                         let mut color_sorted:Vec<_> = self.color_list.iter().collect();
                         color_sorted.sort_by(|a,b| {
@@ -244,7 +242,7 @@ impl ImageWindow {
                                 let lab_a = iris_color::OkLab::from_rgb(&value.to_rgb());
                                 let lab_b = iris_color::OkLab::from_rgb(&rgb);
                                 lab_a.distance_to_lab(&lab_b)
-                            }
+                            },
                         }
                         max_dist = max_dist.max(dist);
                         min_dist = min_dist.min(dist);
@@ -273,7 +271,7 @@ impl ImageWindow {
         for (_,p) in self.color_percent.iter_mut(){
             *p = ((*p as f64 *size)/(size-transparent_pixels)) as f32
         }
-        //println!("min: {} \n max: {}",min_dist,max_dist);
+        // println!("min: {} \n max: {}",min_dist,max_dist);
         for (_id,c) in self.color_list.iter_mut(){
             c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()))
         }

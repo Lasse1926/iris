@@ -8,7 +8,6 @@ pub enum ColorSpace {
     CieLab,
     OkLab,
     XYZ,
-    HSL,
 }
 
 pub fn rgb_distance(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
@@ -223,6 +222,13 @@ pub struct HSL {
     pub l:f32,
 }
 
+#[derive(Debug,PartialEq)]
+pub enum HSLDistanceType {
+    Hue,
+    Saturation,
+    Lightness,
+}
+
 impl HSL {
     pub fn new(h:f32,s:f32,l:f32) -> Self {
         Self{h,s,l}
@@ -252,6 +258,15 @@ impl HSL {
         h = h/6.0;
 
         Self{h,s,l}
+    }
+    pub fn hue_distance(&self,hsl:&HSL) -> f32 {
+        (self.h.powf(2.0) - hsl.h.powf(2.0)).sqrt() 
+    }
+    pub fn saturation_distance(&self,hsl:&HSL) -> f32 {
+        (self.s.powf(2.0) - hsl.s.powf(2.0)).sqrt() 
+    }
+    pub fn lightness_distance(&self,hsl:&HSL) -> f32 {
+        (self.l.powf(2.0) - hsl.l.powf(2.0)).sqrt() 
     }
     
 }
