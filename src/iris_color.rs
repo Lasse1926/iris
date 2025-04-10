@@ -125,26 +125,35 @@ impl AvarageRgb {
                         egui::Image::from_texture(texture)
                     );
                 }
-                ui.label(format!("RGB : {}|{}|{}",self.r,self.g,self.b));
+                let rgb = Rgb::from([self.r,self.g,self.b]);
+                ui.label(format!("RGB : {},{},{}",self.r,self.g,self.b));
+                let hsl = HSL::from_rgb(&rgb);
+                ui.label(format!("HSL : {:.2},{:.2},{:.2}",hsl.h,hsl.s,hsl.l));
+                let ok_lab = OkLab::from_rgb(&rgb);
+                let cie_lab = CieLab::from_rgb(rgb);
+                ui.label(format!("OkLab : {:.2},{:.2},{:.2}",ok_lab.l,ok_lab.a,ok_lab.b));
+                ui.label(format!("CieLab : {:.2},{:.2},{:.2}",cie_lab.l,cie_lab.a,cie_lab.b));
                 egui::CollapsingHeader::new("Colors").show(ui,|ui|{
-                    egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
-                        let aw = ui.available_width();
-                        egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
-                            let mut column_count = 0;
-                            for c in &self.colors{
-                                if let Some(texture) = &c.texture {
-                                    ui.add(
-                                        egui::Image::from_texture(texture)
-                                    );
-                                    column_count += 1;
-                                    if column_count > (aw/(ui.available_width()+3.0)) as i32 {
-                                        ui.end_row();
-                                        column_count = 0;
+                    if self.colors.len() > 0 {
+                        egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
+                            let aw = ui.available_width();
+                            egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
+                                let mut column_count = 0;
+                                for c in &self.colors{
+                                    if let Some(texture) = &c.texture {
+                                        ui.add(
+                                            egui::Image::from_texture(texture)
+                                        );
+                                        column_count += 1;
+                                        if column_count > (aw/(ui.available_width()+3.0)) as i32 {
+                                            ui.end_row();
+                                            column_count = 0;
+                                        }
                                     }
                                 }
-                            }
+                            });
                         });
-                    });
+                    }
                 });
             });
             self.color_info_window_open = window_open;
@@ -270,8 +279,27 @@ impl OkLab {
         OkLab{l,a,b}
     }
     pub fn from_rgb(rgb:&Rgb<u8>) -> Self {
-        Self::from_xyz(&XYZ::from_rgb(&rgb))
+
+        let r = rgb.channels()[0] as f32 /255.0;
+        let g = rgb.channels()[1] as f32 /255.0;
+        let b = rgb.channels()[2] as f32 /255.0;
+
+        let mut l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+        let mut m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+        let mut s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+          // Math.crb (cube root) here is the equivalent of the C++ cbrtf function here: https://bottosson.github.io/posts/oklab/#converting-from-linear-srgb-to-oklab
+        l = l.powf(1.0/3.0); 
+        m = m.powf(1.0/3.0); 
+        s = s.powf(1.0/3.0);
+        Self{
+        l: l * 0.2104542553 + m * 0.7936177850 + s * 0.0040720468,
+        a: l * 1.9779984951 + m * -2.4285922050 + s * 0.4505937099,
+        b: l * 0.0259040371 + m * 0.7827717662 + s * 0.8086757660
+        }
     }
+    // pub fn from_rgb(rgb:&Rgb<u8>) -> Self {
+    //     Self::from_xyz(&XYZ::from_rgb(&rgb))
+    // }
     pub fn distance_to_lab_squared(&self,comp:&OkLab) -> f32 {
         (self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)
     }

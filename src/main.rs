@@ -261,7 +261,9 @@ impl ImageWindow {
                         }
                     }
                 }
-                if !rgb_already_registered{
+                let av = iris_color::AvarageRgb::from_rgb(rgb);
+                let color_values:Vec<&iris_color::AvarageRgb> = self.color_list.values().collect();
+                if !rgb_already_registered && !color_values.contains(&&av){
                     self.color_percent.insert(self.color_list.len() as u32,(1.0/size)as f32);
                     self.color_list.insert(self.color_list.len() as u32,iris_color::AvarageRgb::from_rgb(rgb));
                 }else if let Some(value) = self.color_list.get_mut(&closest_color_key){
