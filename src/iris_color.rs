@@ -1,6 +1,10 @@
-use std::fmt::Debug;
+use std::{cmp::Ordering, fmt::Debug};
 use std::fmt;
+use egui::Vec2;
 use image::{Pixel, Rgb};
+use std::cell::Cell;
+
+use super::WINDOW_ID;
 
 #[derive(Debug,PartialEq)]
 pub enum ColorSpace {
@@ -35,13 +39,16 @@ pub fn rgb_distance_squared(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
     let dist = f32::powf(r_b - r_a,2.0) + f32::powf(g_b - g_a,2.0) + f32::powf(b_b - b_a,2.0);
     dist
 }
-
+#[derive(Clone)]
 pub struct AvarageRgb {
     pub r:u8,
     pub g:u8,
     pub b:u8,
     pub color_n:u32,
     pub texture: Option<egui::TextureHandle>,
+    pub colors:Vec<AvarageRgb>,
+    pub color_info_window_open:bool,
+    pub id:usize,
 }
 
 impl Debug for AvarageRgb {
@@ -50,17 +57,33 @@ impl Debug for AvarageRgb {
     }
 }
 
+
 impl AvarageRgb {
     pub fn to_rgb(&self) -> Rgb<u8>{
         Rgb::from([self.r,self.g,self.b])
     }
     pub fn from_rgb(rgb:Rgb<u8>) -> Self{
 
-        let r = rgb.channels()[0];
-        let g = rgb.channels()[1];
-        let b = rgb.channels()[2];
+        WINDOW_ID.with(|thread_id|{
 
-        AvarageRgb {r,g,b,color_n:1,texture:None}
+            let r = rgb.channels()[0];
+            let g = rgb.channels()[1];
+            let b = rgb.channels()[2];
+
+            let id = thread_id.get();
+            thread_id.set(id+1);
+
+            AvarageRgb {
+                r,
+                g,
+                b,
+                color_n:1,
+                texture:None,
+                colors:vec![],
+                color_info_window_open:false,
+                id,
+            }
+        })
     }
 
     pub fn _avarage(&mut self,comp: &AvarageRgb){
@@ -68,9 +91,10 @@ impl AvarageRgb {
         self.r += comp.r/self.color_n as u8;
         self.g += comp.g/self.color_n as u8;
         self.b += comp.b/self.color_n as u8;
+        self.colors.append(&mut comp.colors.clone());
     }
 
-    pub fn avarage_with_rgb(&mut self,comp: &Rgb<u8>){
+    pub fn avarage_with_rgb(&mut self,comp: &Rgb<u8>,color_grad:f32){
 
         let new_r = comp.channels()[0] as u32;
         let new_g = comp.channels()[1] as u32;
@@ -83,15 +107,61 @@ impl AvarageRgb {
         self.r = 254.min(((r + new_r.pow(2))/(self.color_n+1)).isqrt())as u8;
         self.g = 254.min(((g + new_g.pow(2))/(self.color_n+1)).isqrt())as u8;
         self.b = 254.min(((b + new_b.pow(2))/(self.color_n+1)).isqrt())as u8;
-
+        if color_grad > 0.1 {
+            let difference = self.colors.contains(&AvarageRgb::from_rgb(*comp));
+            if !difference && OkLab::from_rgb(&self.to_rgb()).distance_to_lab(&OkLab::from_rgb(comp)) >= 0.1{
+                self.colors.push(AvarageRgb::from_rgb(*comp));
+            }
+        } 
         self.color_n += 1;
 
+    }
+    pub fn color_info_window_show(&mut self,ctx:&egui::Context){
+        if self.color_info_window_open {
+            let mut window_open = self.color_info_window_open;
+            egui::Window::new(format!("{}|{}|{}",self.r,self.g,self.b)).id(egui::Id::new(self.id)).open(&mut window_open).show(ctx, |ui| {
+                if let Some(texture) = &self.texture {
+                    ui.add(
+                        egui::Image::from_texture(texture)
+                    );
+                }
+                ui.label(format!("RGB : {}|{}|{}",self.r,self.g,self.b));
+                egui::CollapsingHeader::new("Colors").show(ui,|ui|{
+                    egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
+                        let aw = ui.available_width();
+                        egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
+                            let mut column_count = 0;
+                            for c in &self.colors{
+                                if let Some(texture) = &c.texture {
+                                    ui.add(
+                                        egui::Image::from_texture(texture)
+                                    );
+                                    column_count += 1;
+                                    if column_count > (aw/(ui.available_width()+3.0)) as i32 {
+                                        ui.end_row();
+                                        column_count = 0;
+                                    }
+                                }
+                            }
+                        });
+                    });
+                });
+            });
+            self.color_info_window_open = window_open;
+        }
     }
 }
 
 impl fmt::Display for AvarageRgb {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f,"({},{},{})",self.r,self.g,self.b)
+    }
+}
+
+impl PartialEq for AvarageRgb {
+    fn eq(&self, other: &Self) -> bool {
+        let dist = OkLab::from_rgb(&self.to_rgb()).distance_to_lab(&OkLab::from_rgb(&other.to_rgb()));
+        dist <= 0.1
     }
 }
 

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::{collections::HashMap,fmt, path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
-use egui::{Color32, ColorImage, DroppedFile, Vec2};
+use egui::{Color32, ColorImage, DroppedFile, Vec2, Widget};
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
 
 mod iris_color;
@@ -106,7 +106,7 @@ impl ImageWindow {
                 );
                 match self.compare_state {
                     CompareState::Percentages => {  // ----------PERCENTAGE GUI
-                        let mut color_sorted:Vec<_> = self.color_list.iter().collect();
+                        let mut color_sorted:Vec<_> = self.color_list.iter_mut().collect();
                         color_sorted.sort_by(|a,b| {
                             if self.color_percent[a.0] < self.color_percent[b.0] {
                                 return Ordering::Greater;
@@ -120,12 +120,14 @@ impl ImageWindow {
                                 let aw = ui.available_width();
                                 egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
                                     let mut column_count = 0;
-                                    for (id,c) in color_sorted.iter(){
+                                    for (id,c) in color_sorted.iter_mut(){
                                         if self.color_percent[id] >= self.color_display_threshhold{
                                             if let Some(texture) = &c.texture {
-                                                ui.add(
-                                                    egui::Image::from_texture(texture)
-                                                );
+                                                let tex_img = egui::Image::from_texture(texture).sense(egui::Sense::CLICK).ui(ui);
+                                                if tex_img.clicked() {
+                                                    c.color_info_window_open = true;
+                                                }
+
                                                 column_count += 1;
                                                 if column_count > (aw/(ui.available_width()+3.0)) as i32 {
                                                     ui.end_row();
@@ -208,7 +210,11 @@ impl ImageWindow {
                         });
                     }
                 }
-
+                for (_,color) in self.color_list.iter_mut(){
+                    if color.color_info_window_open {
+                        color.color_info_window_show(ui.ctx());
+                    }
+                }
             }); 
             self.open = window_open;
         }
@@ -259,7 +265,7 @@ impl ImageWindow {
                     self.color_percent.insert(self.color_list.len() as u32,(1.0/size)as f32);
                     self.color_list.insert(self.color_list.len() as u32,iris_color::AvarageRgb::from_rgb(rgb));
                 }else if let Some(value) = self.color_list.get_mut(&closest_color_key){
-                    if self.color_gradation > 0.0 {value.avarage_with_rgb(&rgb);}
+                    if self.color_gradation > 0.0 {value.avarage_with_rgb(&rgb,self.color_gradation);}
                     if let Some(percent) = self.color_percent.get_mut(&closest_color_key){
                         *percent += (1.0/size) as f32;
                     }
@@ -273,7 +279,10 @@ impl ImageWindow {
         }
         // println!("min: {} \n max: {}",min_dist,max_dist);
         for (_id,c) in self.color_list.iter_mut(){
-            c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()))
+            c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()));
+            for sub_c in c.colors.iter_mut() {
+                sub_c.texture =Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(sub_c.r, sub_c.g, sub_c.b)),Default::default())); 
+            }
         }
     }
 }
