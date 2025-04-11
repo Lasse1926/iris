@@ -7,6 +7,7 @@ use egui::{Color32, ColorImage, DroppedFile, Vec2, Widget};
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
 
 mod iris_color;
+mod iris_image_creation;
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
@@ -292,6 +293,7 @@ impl ImageWindow {
 #[derive(Default)]
 struct MyEguiApp {
     image_windows:Vec<ImageWindow>,
+    image_creation_windows:Vec<iris_image_creation::ImageCreator>,
 }
 
 impl MyEguiApp {
@@ -317,6 +319,7 @@ impl eframe::App for MyEguiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             let mut image_window_to_remove:Vec<usize> = vec![];
+            let mut image_creation_windows_to_remove:Vec<usize> = vec![];
             for (index,w) in self.image_windows.iter_mut().enumerate(){
                 if w.open {
                     w.show(ui.ctx());
@@ -324,11 +327,18 @@ impl eframe::App for MyEguiApp {
                    image_window_to_remove.push(index); 
                 }
             }
+            for (index,w) in self.image_creation_windows.iter_mut().enumerate(){
+                if w.open {
+                    w.show(ui.ctx());
+                }else{
+                   image_creation_windows_to_remove.push(index); 
+                }
+            }
             for index in image_window_to_remove{
                 self.image_windows.remove(index);
             }
             if ui.add(egui::Button::new("iw")).clicked(){
-                println!("{:?}",self.image_windows);
+                self.image_creation_windows.push(iris_image_creation::ImageCreator::new());
             }
         }); 
     }
