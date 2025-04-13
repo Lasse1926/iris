@@ -2,7 +2,6 @@ use std::{cmp::Ordering, fmt::Debug};
 use std::fmt;
 use egui::Vec2;
 use image::{Pixel, Rgb};
-use std::cell::Cell;
 
 use super::WINDOW_ID;
 
