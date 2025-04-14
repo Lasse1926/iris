@@ -1,5 +1,7 @@
 use image::{Pixel, Rgb, RgbImage};
+
 use super::WINDOW_ID;
+use super::iris_color;
 
 #[derive(Default)]
 pub struct ImageCreator{
@@ -25,6 +27,7 @@ impl ImageCreator {
             let mut window_open = self.open;
             egui::Window::new("ImageCreator").id(egui::Id::new(self.id)).open(&mut window_open).show(ctx,|ui|{
                 if ui.add(egui::Button::new("gen")).clicked() {
+                    HSLRect::generate_sl_rect(313.0);
                 }
             });
             self.open = window_open;
@@ -78,4 +81,33 @@ impl RGBRect {
     }
 }
 
+pub struct HSLRect;
+
+impl HSLRect {
+    pub fn generate_h_bar(){
+        let mut img = RgbImage::new(64,16);
+        for x in 0..64 {
+            for y in 0..16{
+                let h = (360.0/64.0) * x as f32;
+                let hsl = iris_color::HSL::new(h, 1.0,0.5);
+                let hsl_rgb = hsl.to_rgb();
+                img.put_pixel(x, y,hsl_rgb);
+            }
+        }
+        let _ = img.save("./created_images/HSL_hue_rect.png");
+    }
+    pub fn generate_sl_rect(h:f32){
+        let mut img = RgbImage::new(64,64);
+        for x in 0..64 {
+            for y in 0..64{
+                let s = x as f32/64.0;
+                let l = (64.0-y as f32)/(64.0+s*64.0);
+                let hsl = iris_color::HSL::new(h,s,l);
+                let hsl_rgb = hsl.to_rgb();
+                img.put_pixel(x, y,hsl_rgb);
+            }
+        }
+        let _ = img.save("./created_images/HSL_saturation_lightness_rect.png");
+    }
+}
 
