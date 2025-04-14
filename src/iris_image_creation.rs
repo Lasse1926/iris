@@ -88,10 +88,7 @@ impl HSLRect {
         let mut img = RgbImage::new(64,16);
         for x in 0..64 {
             for y in 0..16{
-                let h = (360.0/64.0) * x as f32;
-                let hsl = iris_color::HSL::new(h, 1.0,0.5);
-                let hsl_rgb = hsl.to_rgb();
-                img.put_pixel(x, y,hsl_rgb);
+                img.put_pixel(x, y,Self::pos_to_rgb_bar(x,64.0));
             }
         }
         let _ = img.save("./created_images/HSL_hue_rect.png");
@@ -100,14 +97,32 @@ impl HSLRect {
         let mut img = RgbImage::new(64,64);
         for x in 0..64 {
             for y in 0..64{
-                let s = x as f32/64.0;
-                let l = (64.0-y as f32)/(64.0+s*64.0);
-                let hsl = iris_color::HSL::new(h,s,l);
-                let hsl_rgb = hsl.to_rgb();
-                img.put_pixel(x, y,hsl_rgb);
+                img.put_pixel(x, y,Self::pos_to_rgb_rect([x,y],h,64.0));
             }
         }
         let _ = img.save("./created_images/HSL_saturation_lightness_rect.png");
+    }
+    pub fn pos_to_rgb_bar(x:u32,size:f32) -> Rgb<u8> {
+        let h = (360.0/size) * x as f32;
+        let hsl = iris_color::HSL::new(h, 1.0,0.5);
+        hsl.to_rgb()
+    }
+    pub fn pos_to_rgb_rect(pos:[u32;2],hue:f32,size:f32) -> Rgb<u8> {
+        let s = pos[0] as f32/size;
+        let l = (size-pos[1] as f32)/(size+s*size);
+        let hsl = iris_color::HSL::new(hue,s,l);
+        hsl.to_rgb()
+    }
+    pub fn rgb_color_to_position_rect(rgb:&Rgb<u8>,size:f32) -> [u32;2] {
+        let hsl = iris_color::HSL::from_rgb(rgb); 
+        let x = hsl.s * size;
+        let y = size - (hsl.l * (size + hsl.s*size));
+        [x as u32,y as u32]
+    }
+    pub fn rgb_color_to_position_bar(rgb:&Rgb<u8>,size:f32) -> u32{
+        let hsl = iris_color::HSL::from_rgb(rgb); 
+        let x = hsl.h / (360.0/size);
+        x as u32
     }
 }
 
