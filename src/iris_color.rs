@@ -338,23 +338,60 @@ impl HSL {
         let v_max = r.max(g.max(b));
         let v_min = r.min(g.min(b));
 
-        let mut h = (v_max+v_min) / 2.0;
+        let delta = v_max - v_min;
+
+        let mut h:f32 = 0.0;
+
+        if delta.abs() <= 0.0001 {
+            h = 0.0;
+        }
+        if (v_max - r).abs() <= 0.0001{
+            h = 60.0 * (((g-b)/delta)%6.0);
+            if h < 0.0 {
+                h = h + 360.0;
+            }
+        }
+
+        if (v_max - g).abs() <= 0.0001{
+            h = 60.0 * (((b-r)/delta)+2.0);
+        }
+
+        if (v_max - b).abs() <= 0.0001{
+            h = 60.0 * (((r-g)/delta)+4.0);
+        }
+
         let l = (v_max+v_min) / 2.0;
 
-        if v_max == v_min {
-            return Self{h:0.0,s:0.0,l};
+        let s:f32;
+
+        if delta.abs() <= 0.0001{
+            s = 0.0;
+        }else {
+            s = delta/(1.0-(2.0*l-1.0).abs());
         }
         
-        let d = v_max - v_min;
-
-        let s = if l> 0.5 {d/(2.0 - v_max - v_min)} else {b/(v_max+v_min)};
-        if v_max == r {h = (g-b)/d+(if g<b {6.0} else {0.0})};
-        if v_max == g {h = (b-r)/d+2.0};
-        if v_max == b {h = (r-g)/d+4.0};
-
-        h = h/6.0;
-
+        
         Self{h,s,l}
+    }
+    pub fn to_rgb(&self) -> Rgb<u8> {
+        let c = (1.0-(2.0*self.l-1.0).abs()) * self.s;
+        let x = c * (1.0-(self.h/60.0%2.0-1.0).abs());
+        let m = self.l - c/2.0;
+
+        let (r,g,b) = match (self.h/60.0).floor() {
+            0.0 => (c,x,0.0),
+            1.0 => (x,c,0.0),
+            2.0 => (0.0,c,x),
+            3.0 => (0.0,x,c),
+            4.0 => (x,0.0,c),
+            _   => (c,0.0,x),
+        };
+
+        Rgb::from([
+                    ((r+m) * 255.0) as u8,
+                    ((g+m) * 255.0) as u8,
+                    ((b+m) * 255.0) as u8
+        ])
     }
     pub fn hue_distance(&self,hsl:&HSL) -> f32 {
         (self.h.powf(2.0) - hsl.h.powf(2.0)).sqrt() 
