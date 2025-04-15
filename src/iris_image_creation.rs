@@ -27,7 +27,8 @@ impl ImageCreator {
             let mut window_open = self.open;
             egui::Window::new("ImageCreator").id(egui::Id::new(self.id)).open(&mut window_open).show(ctx,|ui|{
                 if ui.add(egui::Button::new("gen")).clicked() {
-                    HSLRect::generate_sl_rect(313.0);
+                    let rect = HSLRect::new([128,64],313.0); 
+                    rect.generate_sl_rect();
                 }
             });
             self.open = window_open;
@@ -81,48 +82,66 @@ impl RGBRect {
     }
 }
 
-pub struct HSLRect;
+pub trait Draw {
+    fn draw(&self); 
+}
+
+pub struct HSLRect{
+    size:[u32;2],
+    obj: Vec<Box<dyn Draw>>,
+    hue:f32,
+}
 
 impl HSLRect {
-    pub fn generate_h_bar(){
-        let mut img = RgbImage::new(64,16);
-        for x in 0..64 {
-            for y in 0..16{
-                img.put_pixel(x, y,Self::pos_to_rgb_bar(x,64.0));
-            }
-        }
-        let _ = img.save("./created_images/HSL_hue_rect.png");
+    pub fn new(size:[u32;2],hue:f32) -> Self {
+        HSLRect{size,obj:vec![],hue}
     }
-    pub fn generate_sl_rect(h:f32){
-        let mut img = RgbImage::new(64,64);
-        for x in 0..64 {
-            for y in 0..64{
-                img.put_pixel(x, y,Self::pos_to_rgb_rect([x,y],h,64.0));
+    pub fn generate_sl_rect(&self){
+        let mut img = RgbImage::new(self.size[0],self.size[1]);
+        for x in 0..self.size[0] {
+            for y in 0..self.size[1]{
+                img.put_pixel(x, y,self.pos_to_rgb_rect([x,y]));
             }
         }
         let _ = img.save("./created_images/HSL_saturation_lightness_rect.png");
     }
-    pub fn pos_to_rgb_bar(x:u32,size:f32) -> Rgb<u8> {
-        let h = (360.0/size) * x as f32;
-        let hsl = iris_color::HSL::new(h, 1.0,0.5);
+    pub fn pos_to_rgb_rect(&self,pos:[u32;2]) -> Rgb<u8> {
+        let s = pos[0] as f32/self.size[0] as f32;
+        let l = (self.size[1]-pos[1])as f32/(self.size[1] as f32+s*self.size[1] as f32);
+        let hsl = iris_color::HSL::new(self.hue,s,l);
         hsl.to_rgb()
     }
-    pub fn pos_to_rgb_rect(pos:[u32;2],hue:f32,size:f32) -> Rgb<u8> {
-        let s = pos[0] as f32/size;
-        let l = (size-pos[1] as f32)/(size+s*size);
-        let hsl = iris_color::HSL::new(hue,s,l);
-        hsl.to_rgb()
-    }
-    pub fn rgb_color_to_position_rect(rgb:&Rgb<u8>,size:f32) -> [u32;2] {
+    pub fn rgb_color_to_position_rect(&self,rgb:&Rgb<u8>) -> [u32;2] {
         let hsl = iris_color::HSL::from_rgb(rgb); 
-        let x = hsl.s * size;
-        let y = size - (hsl.l * (size + hsl.s*size));
+        let x = hsl.s * self.size[0]as f32;
+        let y = self.size[1]as f32 - (hsl.l * (self.size[1]as f32 + hsl.s *self.size[1] as f32));
         [x as u32,y as u32]
-    }
-    pub fn rgb_color_to_position_bar(rgb:&Rgb<u8>,size:f32) -> u32{
-        let hsl = iris_color::HSL::from_rgb(rgb); 
-        let x = hsl.h / (360.0/size);
-        x as u32
     }
 }
 
+pub struct HSLBar{
+    size:u32,
+    obj: Vec<Box<dyn Draw>>,
+}
+
+impl HSLBar {
+    pub fn generate_h_bar(&self){
+        let mut img = RgbImage::new(64,16);
+        for x in 0..64 {
+            for y in 0..16{
+                img.put_pixel(x, y,self.pos_to_rgb_bar(x as f32));
+            }
+        }
+        let _ = img.save("./created_images/HSL_hue_rect.png");
+    }
+    pub fn pos_to_rgb_bar(&self,x:f32) -> Rgb<u8> {
+        let h = (360.0/self.size as f32) * x;
+        let hsl = iris_color::HSL::new(h, 1.0,0.5);
+        hsl.to_rgb()
+    }
+    pub fn rgb_color_to_position_bar(&self,rgb:&Rgb<u8>) -> u32{
+        let hsl = iris_color::HSL::from_rgb(rgb); 
+        let x = hsl.h / (360.0/self.size as f32);
+        x as u32
+    }
+}
