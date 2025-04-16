@@ -27,14 +27,15 @@ impl ImageCreator {
             let mut window_open = self.open;
             egui::Window::new("ImageCreator").id(egui::Id::new(self.id)).open(&mut window_open).show(ctx,|ui|{
                 if ui.add(egui::Button::new("gen")).clicked() {
-                    let mut rect = HSLRect::new([640,640],313.0); 
+                    let mut rect = HSLRect::new([320,160],313.0); 
                     let mark = RGBMarker::new(Rgb::from([129,50,112]),20,5);
-                    let mark1 = RGBMarker::new(Rgb::from([255, 122, 226]),20,5);
-                    let mark2 = RGBMarker::new(Rgb::from([255, 0, 200]),20,5);
+                    let mark1 = RGBMarker::new(Rgb::from([60, 35, 226]),20,5);
+                    let mark2 = RGBMarker::new(Rgb::from([255, 200, 22]),20,5);
                     rect.obj.push(mark);
                     rect.obj.push(mark1);
                     rect.obj.push(mark2);
                     rect.generate_sl_rect();
+                    rect.generate_h_bar();
                 }
             });
             self.open = window_open;
@@ -93,7 +94,8 @@ pub trait Draw {
 }
 
 pub struct HSLRect{
-    img:RgbImage,
+    img_rect:RgbImage,
+    img_bar:RgbImage,
     size:[u32;2],
     obj: Vec<RGBMarker>,
     hue:f32,
@@ -101,20 +103,21 @@ pub struct HSLRect{
 
 impl HSLRect {
     pub fn new(size:[u32;2],hue:f32) -> Self {
-        let img = RgbImage::new(size[0],size[1]);
-        HSLRect{size,obj:vec![],hue,img}
+        let img_rect = RgbImage::new(size[0],size[1]);
+        let img_bar = RgbImage::new(size[0],size[1]/4);
+        HSLRect{size,obj:vec![],hue,img_rect,img_bar}
     }
     pub fn generate_sl_rect(&mut self){
         for x in 0..self.size[0] {
             for y in 0..self.size[1]{
-                self.img.put_pixel(x, y,self.pos_to_rgb_rect([x,y]));
+                self.img_rect.put_pixel(x, y,self.pos_to_rgb_rect([x,y]));
             }
         }
         let mut clone_obj = self.obj.clone();
         for m in clone_obj.iter_mut() {
             m.draw_rect(self);
         }
-        let _ = self.img.save("./created_images/HSL_saturation_lightness_rect.png");
+        let _ = self.img_rect.save("./created_images/HSL_saturation_lightness_rect.png");
     }
     pub fn pos_to_rgb_rect(&self,pos:[u32;2]) -> Rgb<u8> {
         let s = pos[0] as f32/self.size[0] as f32;
@@ -128,14 +131,17 @@ impl HSLRect {
         let y = hsl.l * self.size[1]as f32;
         [x as u32,y as u32]
     }
-    pub fn generate_h_bar(&self){
-        let mut img = RgbImage::new(self.size[0],self.size[1]/4);
+    pub fn generate_h_bar(&mut self){
         for x in 0..self.size[0] {
             for y in 0..self.size[1]/4{
-                img.put_pixel(x, y,self.pos_to_rgb_bar(x as f32));
+                self.img_bar.put_pixel(x, y,self.pos_to_rgb_bar(x as f32));
             }
         }
-        let _ = img.save("./created_images/HSL_hue_rect.png");
+        let mut clone_obj = self.obj.clone();
+        for m in clone_obj.iter_mut() {
+            m.draw_bar(self);
+        }
+        let _ = self.img_bar.save("./created_images/HSL_hue_rect.png");
     }
     pub fn pos_to_rgb_bar(&self,x:f32) -> Rgb<u8> {
         let h = (360.0/self.size[0] as f32) * x;
@@ -173,19 +179,45 @@ impl Draw for RGBMarker{
                 let dist = ((x as f32 - rgb_pos[0]as f32).powf(2.0) + (y as f32 - rgb_pos[1] as f32).powf(2.0)).sqrt();
                 if x < parent.size[0] && y < parent.size[1] {
                     if dist < (self.size/2) as f32 {
-                        parent.img.put_pixel(x, y,self.rgb);
+                        parent.img_rect.put_pixel(x, y,self.rgb);
                     }
                     if dist >= (self.size/2) as f32 && dist <= (self.size/2) as f32 + (self.border_size as f32/2.0) {
-                        parent.img.put_pixel(x, y,Rgb::from([255,255,255]));
+                        parent.img_rect.put_pixel(x, y,Rgb::from([255,255,255]));
                     }
                     if dist > (self.size/2) as f32 + (self.border_size as f32/2.0) && dist <= (self.size/2) as f32 + self.border_size as f32 {
-                        parent.img.put_pixel(x, y,Rgb::from([0,0,0]));
+                        parent.img_rect.put_pixel(x, y,Rgb::from([0,0,0]));
                     }
                 }
             }
         }
     }    
-    fn draw_bar(&mut self, _parent: &mut HSLRect) {
-        
+    fn draw_bar(&mut self, parent: &mut HSLRect) {
+        let rgb_pos = parent.rgb_color_to_position_bar(&self.rgb);
+        let x_start = if let Some(val) = rgb_pos.checked_sub(self.size) {val} else {0};
+        let x_end = if let Some(val) = rgb_pos.checked_add(self.size) {val} else {u32::MAX};
+        for x in x_start..x_end{
+            for y in 0..(parent.size[1]/4){
+                let dist = (x as f32 - rgb_pos as f32).abs();
+                if x < parent.size[0] && y < parent.size[1]/4 {
+                    if dist < (self.size/2) as f32 {
+                        parent.img_bar.put_pixel(x, y,self.rgb);
+                    }
+                    if dist >= (self.size/2) as f32 && dist <= (self.size/2) as f32 + (self.border_size as f32/2.0) {
+                        parent.img_bar.put_pixel(x, y,Rgb::from([255,255,255]));
+                    }
+                    if dist > (self.size/2) as f32 + (self.border_size as f32/2.0) && dist <= (self.size/2) as f32 + self.border_size as f32 {
+                        parent.img_bar.put_pixel(x, y,Rgb::from([0,0,0]));
+                    }
+                    if dist <= ((self.size/2) + self.border_size/2) as f32{
+                        if y <= 0 + self.border_size || y >= parent.size[1]/4 -1 - self.border_size{
+                            parent.img_bar.put_pixel(x, y,Rgb::from([255,255,255]));
+                        }
+                        if y <= 0 + self.border_size/2 || y >= parent.size[1]/4 -1 - self.border_size/2{
+                            parent.img_bar.put_pixel(x, y,Rgb::from([0,0,0]));
+                        }
+                    }
+                }
+            }
+        }
     }
 }
