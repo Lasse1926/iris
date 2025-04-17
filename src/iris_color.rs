@@ -149,6 +149,9 @@ impl AvarageRgb {
                         egui::Image::from_texture(texture)
                     );
                 }
+                if self.img_rect.is_none() && self.img_bar.is_none() {
+                    self.generate_color_display();
+                }
                 let rgb = Rgb::from([self.r,self.g,self.b]);
                 ui.label(format!("RGB : {},{},{}",self.r,self.g,self.b));
                 let hsl = HSL::from_rgb(&rgb);

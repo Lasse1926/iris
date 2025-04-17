@@ -28,6 +28,8 @@ struct ImageWindow {
     img_rect:Option<egui::TextureHandle>,
     img_bar:Option<egui::TextureHandle>,
     img_dispaly_generated:bool,
+    reload_hsl_rect:bool,
+    reload_hsl_bar:bool,
 }
 
 #[derive(Debug,PartialEq)]
@@ -71,6 +73,8 @@ impl ImageWindow {
                 img_bar: None,
                 img_rect: None,
                 img_dispaly_generated: false,
+                reload_hsl_rect:false,
+                reload_hsl_bar:false,
             }
 
         })
@@ -101,26 +105,31 @@ impl ImageWindow {
             self.img = Some(iris_image_creation::HSLRect::new([256,128],dom_color.unwrap()));
         }
         if let Some(img) = &mut self.img {
+            img.obj.clear();
             for (id,c) in color_sorted{
                 if self.color_percent[id] >= self.color_display_threshhold {
                     img.obj.push(iris_image_creation::RGBMarker::new(c.to_rgb(),5,2));
                 }
             }
             img.generate_h_bar();
+            self.reload_hsl_bar = true;
             img.generate_sl_rect();
+            self.reload_hsl_rect = true;
         }
         self.img_dispaly_generated = true;
     }
     fn show (&mut self,ctx:&egui::Context){
         if self.open{
-            if self.img_bar.is_none() && self.img_dispaly_generated{
+            if (self.img_bar.is_none()|| self.reload_hsl_bar) && self.img_dispaly_generated  {
                 if let Some(img) = &self.img {
                     self.img_bar = Some(ctx.load_texture("img_bar",ColorImage::from_rgb([img.size[0].try_into().unwrap(),(img.size[1]/4).try_into().unwrap()],&img.img_bar),Default::default()));
+                    self.reload_hsl_bar = false;
                 }
             }
-            if self.img_rect.is_none() && self.img_dispaly_generated{
+            if (self.img_rect.is_none()|| self.reload_hsl_rect) && self.img_dispaly_generated{
                 if let Some(img) = &self.img {
                     self.img_rect = Some(ctx.load_texture("img_rect",ColorImage::from_rgb([img.size[0].try_into().unwrap(),img.size[1].try_into().unwrap()],&img.img_rect),Default::default()));
+                    self.reload_hsl_rect = false;
                 }
             }
             let mut window_open = self.open;
@@ -225,10 +234,10 @@ impl ImageWindow {
                                 );
                             }else {
                                 ui.label("No Color Display Texture found");
-                                if ui.button("Generate").clicked() {
-                                    self.generate_color_display();
-                                }
                             };
+                            if ui.button("Generate").clicked() {
+                                self.generate_color_display();
+                            }
                         });
                     },
                     CompareState::Saturation => {
@@ -295,10 +304,10 @@ impl ImageWindow {
                                 );
                             }else {
                                 ui.label("No Color Display Texture found");
-                                if ui.button("Generate").clicked() {
-                                    self.generate_color_display();
-                                }
                             };
+                            if ui.button("Generate").clicked() {
+                                self.generate_color_display();
+                            }
                         });
                     }
                 }

@@ -117,7 +117,6 @@ impl HSLRect {
         for m in clone_obj.iter_mut() {
             m.draw_rect(self);
         }
-        let _ = self.img_rect.save("./created_images/HSL_saturation_lightness_rect.png");
     }
     pub fn save_rect(&self){ 
         let _ = self.img_rect.save("./created_images/HSL_saturation_lightness_rect.png");
