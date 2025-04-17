@@ -1,9 +1,12 @@
-use std::{cmp::Ordering, fmt::Debug};
+use std::fmt::Debug;
 use std::fmt;
+use egui::ColorImage;
 use egui::Vec2;
 use image::{Pixel, Rgb};
 
 use super::WINDOW_ID;
+use super::iris_color;
+use super::iris_image_creation as iic;
 
 #[derive(Debug,PartialEq)]
 pub enum ColorSpace {
@@ -48,6 +51,10 @@ pub struct AvarageRgb {
     pub colors:Vec<AvarageRgb>,
     pub color_info_window_open:bool,
     pub id:usize,
+    pub img:iic::HSLRect,
+    pub img_rect:Option<egui::TextureHandle>,
+    pub img_bar:Option<egui::TextureHandle>,
+    pub img_dispaly_generated:bool,
 }
 
 impl Debug for AvarageRgb {
@@ -71,7 +78,7 @@ impl AvarageRgb {
 
             let id = thread_id.get();
             thread_id.set(id+1);
-
+            let img = iic::HSLRect::new([128,64],iris_color::HSL::from_rgb(&rgb).h);
             AvarageRgb {
                 r,
                 g,
@@ -81,8 +88,20 @@ impl AvarageRgb {
                 colors:vec![],
                 color_info_window_open:false,
                 id,
+                img,
+                img_bar: None,
+                img_rect: None,
+                img_dispaly_generated: false,
             }
         })
+    }
+    pub fn generate_color_display(&mut self) {
+        let rgb = Rgb::from([self.r,self.g,self.b]);
+        let marker = iic::RGBMarker::new(rgb,5,2);
+        self.img.obj.push(marker);
+        self.img.generate_h_bar();
+        self.img.generate_sl_rect();
+        self.img_dispaly_generated = true;
     }
 
     pub fn _avarage(&mut self,comp: &AvarageRgb){
@@ -117,6 +136,12 @@ impl AvarageRgb {
     }
     pub fn color_info_window_show(&mut self,ctx:&egui::Context){
         if self.color_info_window_open {
+            if self.img_bar.is_none() && self.img_dispaly_generated{
+                self.img_bar = Some(ctx.load_texture("img_bar",ColorImage::from_rgb([self.img.size[0].try_into().unwrap(),(self.img.size[1]/4).try_into().unwrap()],&self.img.img_bar),Default::default()));
+            }
+            if self.img_rect.is_none() && self.img_dispaly_generated{
+                self.img_rect = Some(ctx.load_texture("img_rect",ColorImage::from_rgb([self.img.size[0].try_into().unwrap(),self.img.size[1].try_into().unwrap()],&self.img.img_rect),Default::default()));
+            }
             let mut window_open = self.color_info_window_open;
             egui::Window::new(format!("{}|{}|{}",self.r,self.g,self.b)).id(egui::Id::new(self.id)).open(&mut window_open).show(ctx, |ui| {
                 if let Some(texture) = &self.texture {
@@ -132,6 +157,25 @@ impl AvarageRgb {
                 let cie_lab = CieLab::from_rgb(rgb);
                 ui.label(format!("OkLab : {:.2},{:.2},{:.2}",ok_lab.l,ok_lab.a,ok_lab.b));
                 ui.label(format!("CieLab : {:.2},{:.2},{:.2}",cie_lab.l,cie_lab.a,cie_lab.b));
+                ui.with_layout(egui::Layout::top_down(egui::Align::LEFT),|ui|{
+                    if let Some(rect) = &self.img_rect {
+                        ui.add(
+                            egui::Image::from_texture(rect)
+                        );
+                    }else {
+                        ui.label("No Color Display Texture found");
+                    };
+                    if let Some(bar) = &self.img_bar {
+                        ui.add(
+                            egui::Image::from_texture(bar)
+                        );
+                    }else {
+                        ui.label("No Color Display Texture found");
+                        if ui.button("Generate").clicked() {
+                            self.generate_color_display();
+                        }
+                    };
+                });
                 egui::CollapsingHeader::new("Colors").show(ui,|ui|{
                     if self.colors.len() > 0 {
                         egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {

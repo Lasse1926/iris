@@ -92,13 +92,13 @@ pub trait Draw {
     fn draw_rect(&mut self,parent:&mut HSLRect); 
     fn draw_bar(&mut self,parent:&mut HSLRect); 
 }
-
+#[derive(Clone)]
 pub struct HSLRect{
-    img_rect:RgbImage,
-    img_bar:RgbImage,
-    size:[u32;2],
-    obj: Vec<RGBMarker>,
-    hue:f32,
+    pub img_rect:RgbImage,
+    pub img_bar:RgbImage,
+    pub size:[u32;2],
+    pub obj: Vec<RGBMarker>,
+    pub hue:f32,
 }
 
 impl HSLRect {
@@ -118,6 +118,12 @@ impl HSLRect {
             m.draw_rect(self);
         }
         let _ = self.img_rect.save("./created_images/HSL_saturation_lightness_rect.png");
+    }
+    pub fn save_rect(&self){ 
+        let _ = self.img_rect.save("./created_images/HSL_saturation_lightness_rect.png");
+    }
+    pub fn save_bar(&self){ 
+        let _ = self.img_bar.save("./created_images/HSL_hue_rect.png");
     }
     pub fn pos_to_rgb_rect(&self,pos:[u32;2]) -> Rgb<u8> {
         let s = pos[0] as f32/self.size[0] as f32;
@@ -141,7 +147,6 @@ impl HSLRect {
         for m in clone_obj.iter_mut() {
             m.draw_bar(self);
         }
-        let _ = self.img_bar.save("./created_images/HSL_hue_rect.png");
     }
     pub fn pos_to_rgb_bar(&self,x:f32) -> Rgb<u8> {
         let h = (360.0/self.size[0] as f32) * x;
