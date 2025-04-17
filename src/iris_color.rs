@@ -356,7 +356,7 @@ impl fmt::Display for OkLab {
         write!(f,"({},{},{})",self.l,self.a,self.b)
     }
 }
-
+#[derive(Clone)]
 pub struct HSL {
     pub h:f32,
     pub s:f32,

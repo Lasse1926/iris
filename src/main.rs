@@ -13,7 +13,6 @@ fn main() {
     let native_options = eframe::NativeOptions::default();
     let _ = eframe::run_native("My egui App", native_options, Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc)))));
 }
-#[derive(Debug)]
 struct ImageWindow {
     id:usize,
     path:PathBuf,
@@ -25,6 +24,10 @@ struct ImageWindow {
     color_dist_type:iris_color::ColorSpace,
     color_display_threshhold:f32,
     compare_state:CompareState,
+    img: Option<iris_image_creation::HSLRect>,
+    img_rect:Option<egui::TextureHandle>,
+    img_bar:Option<egui::TextureHandle>,
+    img_dispaly_generated:bool,
 }
 
 #[derive(Debug,PartialEq)]
@@ -64,12 +67,62 @@ impl ImageWindow {
                 color_dist_type,
                 color_display_threshhold,
                 compare_state,
+                img: None,
+                img_bar: None,
+                img_rect: None,
+                img_dispaly_generated: false,
             }
 
         })
     }
+    fn generate_color_display(&mut self) {
+        if self.color_list.len() <= 0 {
+            return;
+        }
+        let mut color_sorted:Vec<_> = self.color_list.iter_mut().collect();
+        color_sorted.sort_by(|a,b| {
+            if self.color_percent[a.0] < self.color_percent[b.0] {
+                return Ordering::Greater;
+            }else{
+                return Ordering::Less;
+            }
+        });
+        let mut dom_color:Option<f32> = None; 
+        for c in &color_sorted {
+            if iris_color::HSL::from_rgb(&c.1.to_rgb()).l >= 0.2 {
+                dom_color = Some(iris_color::HSL::from_rgb(&c.1.to_rgb()).h);
+                break;
+            }        
+        } 
+        if dom_color.is_none() {
+            dom_color = Some(iris_color::HSL::from_rgb(&color_sorted[1].1.to_rgb()).h);
+        }
+        if self.img.is_none() {
+            self.img = Some(iris_image_creation::HSLRect::new([256,128],dom_color.unwrap()));
+        }
+        if let Some(img) = &mut self.img {
+            for (id,c) in color_sorted{
+                if self.color_percent[id] >= self.color_display_threshhold {
+                    img.obj.push(iris_image_creation::RGBMarker::new(c.to_rgb(),5,2));
+                }
+            }
+            img.generate_h_bar();
+            img.generate_sl_rect();
+        }
+        self.img_dispaly_generated = true;
+    }
     fn show (&mut self,ctx:&egui::Context){
         if self.open{
+            if self.img_bar.is_none() && self.img_dispaly_generated{
+                if let Some(img) = &self.img {
+                    self.img_bar = Some(ctx.load_texture("img_bar",ColorImage::from_rgb([img.size[0].try_into().unwrap(),(img.size[1]/4).try_into().unwrap()],&img.img_bar),Default::default()));
+                }
+            }
+            if self.img_rect.is_none() && self.img_dispaly_generated{
+                if let Some(img) = &self.img {
+                    self.img_rect = Some(ctx.load_texture("img_rect",ColorImage::from_rgb([img.size[0].try_into().unwrap(),img.size[1].try_into().unwrap()],&img.img_rect),Default::default()));
+                }
+            }
             let mut window_open = self.open;
             egui::Window::new(self.name.clone()).id(egui::Id::new(self.id)).open(&mut window_open).show(ctx, |ui| {
 
@@ -158,6 +211,25 @@ impl ImageWindow {
                                 });
                             });
                         });
+                        ui.with_layout(egui::Layout::top_down(egui::Align::LEFT),|ui|{
+                            if let Some(rect) = &self.img_rect {
+                                ui.add(
+                                    egui::Image::from_texture(rect)
+                                );
+                            }else {
+                                ui.label("No Color Display Texture found");
+                            };
+                            if let Some(bar) = &self.img_bar {
+                                ui.add(
+                                    egui::Image::from_texture(bar)
+                                );
+                            }else {
+                                ui.label("No Color Display Texture found");
+                                if ui.button("Generate").clicked() {
+                                    self.generate_color_display();
+                                }
+                            };
+                        });
                     },
                     CompareState::Saturation => {
                         ui.add(egui::Slider::new(&mut self.color_display_threshhold,0.0 ..= 1.0).text("Color Display Threshold"));
@@ -208,6 +280,25 @@ impl ImageWindow {
                                     }
                                 });
                             });
+                        });
+                        ui.with_layout(egui::Layout::top_down(egui::Align::LEFT),|ui|{
+                            if let Some(rect) = &self.img_rect {
+                                ui.add(
+                                    egui::Image::from_texture(rect)
+                                );
+                            }else {
+                                ui.label("No Color Display Texture found");
+                            };
+                            if let Some(bar) = &self.img_bar {
+                                ui.add(
+                                    egui::Image::from_texture(bar)
+                                );
+                            }else {
+                                ui.label("No Color Display Texture found");
+                                if ui.button("Generate").clicked() {
+                                    self.generate_color_display();
+                                }
+                            };
                         });
                     }
                 }
