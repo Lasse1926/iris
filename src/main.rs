@@ -20,6 +20,7 @@ struct ImageWindow {
     open:bool,
     color_list:HashMap<u32,iris_color::AvarageRgb>,
     color_percent:HashMap<u32,f32>,
+    color_pixel_count:HashMap<u32,u32>,
     color_gradation:f32,
     color_dist_type:iris_color::ColorSpace,
     color_display_threshhold:f32,
@@ -54,6 +55,7 @@ impl ImageWindow {
             let open = true;
             let color_percent = HashMap::new();
             let color_list = HashMap::new();
+            let color_pixel_count = HashMap::new();
             let color_gradation = 50.0;
             let color_dist_type = iris_color::ColorSpace::OkLab;
             let color_display_threshhold = 0.01;
@@ -64,6 +66,7 @@ impl ImageWindow {
                 open,
                 color_percent,
                 color_list,
+                color_pixel_count,
                 color_gradation,
                 id,
                 color_dist_type,
@@ -206,7 +209,7 @@ impl ImageWindow {
                             egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
                                 ui.with_layout(egui::Layout::top_down(egui::Align::TOP).with_cross_justify(true),|ui|{
                                     for (id,c) in color_sorted.iter(){
-                                        if self.color_percent[id] >= self.color_display_threshhold{
+                                        if self.color_percent[id] >= self.color_display_threshhold || self.color_display_threshhold <= 0.0{
                                             if let Some(texture) = &c.texture {
                                                 ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
                                                     ui.add(
@@ -276,7 +279,7 @@ impl ImageWindow {
                             egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
                                 ui.with_layout(egui::Layout::top_down(egui::Align::TOP).with_cross_justify(true),|ui|{
                                     for (id,c) in &color_sorted{
-                                        if self.color_percent[id] >= self.color_display_threshhold{
+                                        if self.color_percent[id] >= self.color_display_threshhold || self.color_display_threshhold == 0.0{
                                             if let Some(texture) = &c.texture {
                                                 ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
                                                     ui.add(
@@ -333,8 +336,8 @@ impl ImageWindow {
                 let rgb = rgba.to_rgb();
                 let mut rgb_already_registered = false;
                 let mut closest_color_dist:f32 = f32::MAX;
-                let mut closest_color_key:u32 = 0;
-                if self.color_gradation > 0.0 {
+                let mut closest_color_key:Option<u32> = None;
+                if self.color_gradation >= 0.0 {
                     for (key,value) in self.color_list.iter_mut(){
                         let dist:f32;
                         match self.color_dist_type{
@@ -353,10 +356,10 @@ impl ImageWindow {
                         }
                         max_dist = max_dist.max(dist);
                         min_dist = min_dist.min(dist);
-                        if dist < self.color_gradation{
+                        if dist <= self.color_gradation{
                             if closest_color_dist > dist {
                                 closest_color_dist = dist;
-                                closest_color_key = *key;
+                                closest_color_key = Some(*key);
                             }
                             rgb_already_registered = true;
                         }
@@ -364,23 +367,31 @@ impl ImageWindow {
                 }
                 let av = iris_color::AvarageRgb::from_rgb(rgb);
                 let color_values:Vec<&iris_color::AvarageRgb> = self.color_list.values().collect();
-                if !rgb_already_registered && !color_values.contains(&&av){
+                if !rgb_already_registered {
                     self.color_percent.insert(self.color_list.len() as u32,(1.0/size)as f32);
+                    self.color_pixel_count.insert(self.color_list.len() as u32, 1);
                     self.color_list.insert(self.color_list.len() as u32,iris_color::AvarageRgb::from_rgb(rgb));
-                }else if let Some(value) = self.color_list.get_mut(&closest_color_key){
-                    if self.color_gradation > 0.0 {value.avarage_with_rgb(&rgb,self.color_gradation);}
-                    if let Some(percent) = self.color_percent.get_mut(&closest_color_key){
-                        *percent += (1.0/size) as f32;
+                }else if let Some(cck) = closest_color_key{
+                    if let Some(value) = self.color_list.get_mut(&cck){
+                        if self.color_gradation > 0.0 {
+                            value.avarage_with_rgb(&rgb,self.color_gradation);
+                        }
+                        if let Some(percent) = self.color_percent.get_mut(&cck){
+                            *percent += (1.0/size) as f32;
+                        }
+                        if let Some(count) = self.color_pixel_count.get_mut(&cck){
+                            *count += 1;
+                        }
                     }
                 }
             }else{
                 transparent_pixels += 1.0;
             }
         }
+        println!("{}",self.color_list.len());
         for (_,p) in self.color_percent.iter_mut(){
-            *p = ((*p as f64 *size)/(size-transparent_pixels)) as f32
+            *p = ((*p as f64 *size)/(size-transparent_pixels)) as f32;
         }
-        // println!("min: {} \n max: {}",min_dist,max_dist);
         for (_id,c) in self.color_list.iter_mut(){
             c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()));
             for sub_c in c.colors.iter_mut() {

@@ -216,7 +216,7 @@ impl fmt::Display for AvarageRgb {
 impl PartialEq for AvarageRgb {
     fn eq(&self, other: &Self) -> bool {
         let dist = OkLab::from_rgb(&self.to_rgb()).distance_to_lab(&OkLab::from_rgb(&other.to_rgb()));
-        dist <= 0.1
+        dist <= 0.01
     }
 }
 
