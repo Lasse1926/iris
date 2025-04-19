@@ -106,9 +106,9 @@ impl AvarageRgb {
 
     pub fn _avarage(&mut self,comp: &AvarageRgb){
         self.color_n += comp.color_n;
-        self.r += comp.r/self.color_n as u8;
-        self.g += comp.g/self.color_n as u8;
-        self.b += comp.b/self.color_n as u8;
+        self.r = self.r.checked_add((comp.r as u32/self.color_n.max(1)).try_into().unwrap_or(255_u8)).unwrap_or(255);
+        self.g = self.g.checked_add((comp.g as u32/self.color_n.max(1)).try_into().unwrap_or(255_u8)).unwrap_or(255);
+        self.b = self.b.checked_add((comp.b as u32/self.color_n.max(1)).try_into().unwrap_or(255_u8)).unwrap_or(255);
         self.colors.append(&mut comp.colors.clone());
     }
 
@@ -215,8 +215,7 @@ impl fmt::Display for AvarageRgb {
 
 impl PartialEq for AvarageRgb {
     fn eq(&self, other: &Self) -> bool {
-        let dist = OkLab::from_rgb(&self.to_rgb()).distance_to_lab(&OkLab::from_rgb(&other.to_rgb()));
-        dist <= 0.01
+        rgb_distance(self.to_rgb(),other.to_rgb()) <= 5.0
     }
 }
 
@@ -347,7 +346,7 @@ impl OkLab {
     //     Self::from_xyz(&XYZ::from_rgb(&rgb))
     // }
     pub fn distance_to_lab_squared(&self,comp:&OkLab) -> f32 {
-        (self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)
+        ((self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0))
     }
     pub fn distance_to_lab(&self,comp:&OkLab) -> f32 {
         ((self.l - comp.l).powf(2.0)+(self.a - comp.a).powf(2.0)+(self.b - comp.b).powf(2.0)).sqrt()

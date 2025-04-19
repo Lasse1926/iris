@@ -5,6 +5,7 @@ use std::cell::Cell;
 use eframe::egui;
 use egui::{Color32, ColorImage, DroppedFile, Vec2, Widget};
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
+use itertools::Itertools;
 
 mod iris_color;
 mod iris_image_creation;
@@ -153,8 +154,8 @@ impl ImageWindow {
                 );
                 let color_deg_max:f32;
                 match self.color_dist_type {
-                    iris_color::ColorSpace::CieLab => color_deg_max = 200.0,
-                    iris_color::ColorSpace::OkLab => color_deg_max = 6.0,
+                    iris_color::ColorSpace::CieLab => color_deg_max = 300.0,
+                    iris_color::ColorSpace::OkLab => color_deg_max = 2.0,
                     iris_color::ColorSpace::Rgb => color_deg_max = 500.0,
                     _=> color_deg_max = 0.0,
                 }
@@ -365,8 +366,6 @@ impl ImageWindow {
                         }
                     }
                 }
-                let av = iris_color::AvarageRgb::from_rgb(rgb);
-                let color_values:Vec<&iris_color::AvarageRgb> = self.color_list.values().collect();
                 if !rgb_already_registered {
                     self.color_percent.insert(self.color_list.len() as u32,(1.0/size)as f32);
                     self.color_pixel_count.insert(self.color_list.len() as u32, 1);
@@ -388,15 +387,44 @@ impl ImageWindow {
                 transparent_pixels += 1.0;
             }
         }
-        println!("{}",self.color_list.len());
         for (_,p) in self.color_percent.iter_mut(){
             *p = ((*p as f64 *size)/(size-transparent_pixels)) as f32;
         }
+
         for (_id,c) in self.color_list.iter_mut(){
             c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()));
             for sub_c in c.colors.iter_mut() {
                 sub_c.texture =Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(sub_c.r, sub_c.g, sub_c.b)),Default::default())); 
             }
+        }
+        self.clean_up();
+    }
+    fn clean_up(&mut self) {
+        let mut id_remove = vec![];
+        let id_list = self.color_list.clone();
+        for ids in id_list.keys().into_iter().combinations(2){
+            if !(id_remove.contains(&ids[0]) || id_remove.contains(&ids[1])){
+                if iris_color::OkLab::from_rgb(&self.color_list[ids[0]].to_rgb()).distance_to_lab(&iris_color::OkLab::from_rgb(&self.color_list[ids[1]].to_rgb())) <= 0.01{
+                    let other_value = self.color_list[ids[1]].clone();
+                    let other_percent = self.color_percent[ids[1]].clone();
+                    let other_pixel = self.color_pixel_count[ids[1]].clone();
+                    if let Some(value) = self.color_list.get_mut(ids[0]){
+                        value._avarage(&other_value);
+                    }
+                    if let Some(value) = self.color_percent.get_mut(ids[0]){
+                        *value += other_percent;
+                    }
+                    if let Some(value) = self.color_pixel_count.get_mut(ids[0]){
+                        *value = value.checked_add(other_pixel).unwrap_or(u32::MAX);
+                    }
+                    id_remove.push(ids[1]);
+                } 
+            }
+        }
+        for id in id_remove {
+            self.color_list.remove(id);
+            self.color_percent.remove(id);
+            self.color_pixel_count.remove(id);
         }
     }
 }
