@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::fmt;
 use egui::ColorImage;
 use egui::Vec2;
+use egui::Widget;
 use image::{Pixel, Rgb};
 
 use super::WINDOW_ID;
@@ -41,6 +42,34 @@ pub fn rgb_distance_squared(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
     let dist = f32::powf(r_b - r_a,2.0) + f32::powf(g_b - g_a,2.0) + f32::powf(b_b - b_a,2.0);
     dist
 }
+
+pub fn color_display(ui: &mut egui::Ui,color: &mut AvarageRgb) -> egui::Response {
+    if let Some(texture) = &color.texture {
+        let response = egui::Image::from_texture(texture).sense(egui::Sense::CLICK).ui(ui) ;
+        if response.clicked() {
+            color.color_info_window_open = true;
+            println!("{:?}",color);
+        }
+        response.widget_info(|| {
+            egui::WidgetInfo::selected(egui::WidgetType::Image,ui.is_enabled(),color.color_info_window_open,"Display Color")
+        });
+        response
+    }else {
+        let (_,response) = ui.allocate_exact_size(egui::vec2(0.0,0.0), egui::Sense::click());
+        response
+    }
+}
+pub fn color_display_percent(ui: &mut egui::Ui,color: &mut AvarageRgb,percent:f32) -> egui::Response {
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
+            let response = color_display(ui, color);
+            ui.label(format!("{}|{}|{} |=> {}%",color.r,color.g,color.b,percent*100.0));
+            response.widget_info(|| {
+                egui::WidgetInfo::selected(egui::WidgetType::Image,ui.is_enabled(),color.color_info_window_open,"Display Color plus extra data")
+            });
+            response
+        }).response
+}
+
 #[derive(Clone)]
 pub struct AvarageRgb {
     pub r:u8,
@@ -144,11 +173,7 @@ impl AvarageRgb {
             }
             let mut window_open = self.color_info_window_open;
             egui::Window::new(format!("{}|{}|{}",self.r,self.g,self.b)).id(egui::Id::new(self.id)).open(&mut window_open).show(ctx, |ui| {
-                if let Some(texture) = &self.texture {
-                    ui.add(
-                        egui::Image::from_texture(texture)
-                    );
-                }
+                color_display(ui, self);
                 if self.img_rect.is_none() && self.img_bar.is_none() {
                     self.generate_color_display();
                 }
@@ -185,16 +210,12 @@ impl AvarageRgb {
                             let aw = ui.available_width();
                             egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
                                 let mut column_count = 0;
-                                for c in &self.colors{
-                                    if let Some(texture) = &c.texture {
-                                        ui.add(
-                                            egui::Image::from_texture(texture)
-                                        );
-                                        column_count += 1;
-                                        if column_count > (aw/(ui.available_width()+3.0)) as i32 {
-                                            ui.end_row();
-                                            column_count = 0;
-                                        }
+                                for c in &mut self.colors{
+                                    color_display(ui, c);
+                                    column_count += 1;
+                                    if column_count > (aw/(ui.available_width()+3.0)) as i32 {
+                                        ui.end_row();
+                                        column_count = 0;
                                     }
                                 }
                             });
@@ -203,6 +224,9 @@ impl AvarageRgb {
                 });
             });
             self.color_info_window_open = window_open;
+            for w in &mut self.colors{
+                w.color_info_window_show(ctx);
+            }
         }
     }
 }

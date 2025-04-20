@@ -189,17 +189,11 @@ impl ImageWindow {
                                     let mut column_count = 0;
                                     for (id,c) in color_sorted.iter_mut(){
                                         if self.color_percent[id] >= self.color_display_threshhold{
-                                            if let Some(texture) = &c.texture {
-                                                let tex_img = egui::Image::from_texture(texture).sense(egui::Sense::CLICK).ui(ui);
-                                                if tex_img.clicked() {
-                                                    c.color_info_window_open = true;
-                                                }
-
-                                                column_count += 1;
-                                                if column_count > (aw/(ui.available_width()+3.0)) as i32 {
-                                                    ui.end_row();
-                                                    column_count = 0;
-                                                }
+                                            iris_color::color_display(ui, c);
+                                            column_count += 1;
+                                            if column_count > (aw/(ui.available_width()+3.0)) as i32 {
+                                                ui.end_row();
+                                                column_count = 0;
                                             }
                                         }
                                     }
@@ -209,16 +203,9 @@ impl ImageWindow {
                         egui::CollapsingHeader::new("Color Percentages").show(ui,|ui|{
                             egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
                                 ui.with_layout(egui::Layout::top_down(egui::Align::TOP).with_cross_justify(true),|ui|{
-                                    for (id,c) in color_sorted.iter(){
+                                    for (id,c) in color_sorted.iter_mut(){
                                         if self.color_percent[id] >= self.color_display_threshhold || self.color_display_threshhold <= 0.0{
-                                            if let Some(texture) = &c.texture {
-                                                ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
-                                                    ui.add(
-                                                        egui::Image::from_texture(texture)
-                                                    );
-                                                    ui.label(format!("{}|{}|{} |=> {}%",c.r,c.g,c.b,self.color_percent[id]*100.0));
-                                                });
-                                            }
+                                            iris_color::color_display_percent(ui, c,self.color_percent[id].clone());
                                         }
                                     }
                                 });
