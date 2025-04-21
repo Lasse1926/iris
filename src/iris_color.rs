@@ -45,10 +45,9 @@ pub fn rgb_distance_squared(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
 
 pub fn color_display(ui: &mut egui::Ui,color: &mut AvarageRgb) -> egui::Response {
     if let Some(texture) = &color.texture {
-        let response = egui::Image::from_texture(texture).sense(egui::Sense::CLICK).ui(ui) ;
+        let response = egui::Image::from_texture(texture).sense(egui::Sense::CLICK).ui(ui).on_hover_text(format!("r:{}|g:{}|b:{}",color.r,color.g,color.b)) ;
         if response.clicked() {
             color.color_info_window_open = true;
-            println!("{:?}",color);
         }
         response.widget_info(|| {
             egui::WidgetInfo::selected(egui::WidgetType::Image,ui.is_enabled(),color.color_info_window_open,"Display Color")
@@ -138,7 +137,7 @@ impl AvarageRgb {
         self.r = self.r.checked_add((comp.r as u32/self.color_n.max(1)).try_into().unwrap_or(255_u8)).unwrap_or(255);
         self.g = self.g.checked_add((comp.g as u32/self.color_n.max(1)).try_into().unwrap_or(255_u8)).unwrap_or(255);
         self.b = self.b.checked_add((comp.b as u32/self.color_n.max(1)).try_into().unwrap_or(255_u8)).unwrap_or(255);
-        self.colors.append(&mut comp.colors.clone());
+        self.colors.push(comp.clone());
     }
 
     pub fn avarage_with_rgb(&mut self,comp: &Rgb<u8>,color_grad:f32){

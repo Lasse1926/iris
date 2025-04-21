@@ -32,6 +32,7 @@ struct ImageWindow {
     img_dispaly_generated:bool,
     reload_hsl_rect:bool,
     reload_hsl_bar:bool,
+    clean_up_value:f32,
 }
 
 #[derive(Debug,PartialEq)]
@@ -61,6 +62,7 @@ impl ImageWindow {
             let color_dist_type = iris_color::ColorSpace::OkLab;
             let color_display_threshhold = 0.01;
             let compare_state = CompareState::Percentages;
+            let clean_up_value = 0.01;
             ImageWindow{
                 path,
                 name,
@@ -79,6 +81,7 @@ impl ImageWindow {
                 img_dispaly_generated: false,
                 reload_hsl_rect:false,
                 reload_hsl_bar:false,
+                clean_up_value,
             }
 
         })
@@ -160,6 +163,8 @@ impl ImageWindow {
                     _=> color_deg_max = 0.0,
                 }
                 ui.add(egui::Slider::new(&mut self.color_gradation,0.0 ..= color_deg_max).text("Color Gradation"));
+                ui.add(egui::Slider::new(&mut self.clean_up_value,0.0 ..= 0.1).text("Color Gradation"))
+                    .on_hover_text("Minimum Color distance in OKLab, at which colors get merged after scan. \n (to clean up Duplicate Colors)");
                 if ui.add(egui::Button::new("Scan")).clicked(){
                     self.scan_image(ui);
                 }
@@ -233,7 +238,7 @@ impl ImageWindow {
                     },
                     CompareState::Saturation => {
                         ui.add(egui::Slider::new(&mut self.color_display_threshhold,0.0 ..= 1.0).text("Color Display Threshold"));
-                        let mut color_sorted:Vec<_> = self.color_list.iter().collect();
+                        let mut color_sorted:Vec<_> = self.color_list.iter_mut().collect();
                         color_sorted.sort_by(|a,b| {
                             if iris_color::HSL::from_rgb(&a.1.to_rgb()).s < (iris_color::HSL::from_rgb(&b.1.to_rgb()).s) {
                                 return Ordering::Greater;
@@ -246,17 +251,13 @@ impl ImageWindow {
                                 let aw = ui.available_width();
                                 egui::Grid::new("Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
                                     let mut column_count = 0;
-                                    for (id,c) in &color_sorted{
+                                    for (id,c) in color_sorted.iter_mut(){
                                         if self.color_percent[id] >= self.color_display_threshhold{
-                                            if let Some(texture) = &c.texture {
-                                                ui.add(
-                                                    egui::Image::from_texture(texture)
-                                                );
-                                                column_count += 1;
-                                                if column_count > (aw/(ui.available_width()+3.0)) as i32 {
-                                                    ui.end_row();
-                                                    column_count = 0;
-                                                }
+                                            iris_color::color_display(ui,c);
+                                            column_count += 1;
+                                            if column_count > (aw/(ui.available_width()+3.0)) as i32 {
+                                                ui.end_row();
+                                                column_count = 0;
                                             }
                                         }
                                     }
@@ -266,16 +267,9 @@ impl ImageWindow {
                         egui::CollapsingHeader::new("Color Percentages").show(ui,|ui|{
                             egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
                                 ui.with_layout(egui::Layout::top_down(egui::Align::TOP).with_cross_justify(true),|ui|{
-                                    for (id,c) in &color_sorted{
+                                    for (id,c) in &mut color_sorted{
                                         if self.color_percent[id] >= self.color_display_threshhold || self.color_display_threshhold == 0.0{
-                                            if let Some(texture) = &c.texture {
-                                                ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
-                                                    ui.add(
-                                                        egui::Image::from_texture(texture)
-                                                    );
-                                                    ui.label(format!("{}|{}|{} |=> {}%",c.r,c.g,c.b,self.color_percent[id]*100.0));
-                                                });
-                                            }
+                                            iris_color::color_display_percent(ui,c,self.color_percent[id]);
                                         }
                                     }
                                 });
@@ -391,7 +385,7 @@ impl ImageWindow {
         let id_list = self.color_list.clone();
         for ids in id_list.keys().into_iter().combinations(2){
             if !(id_remove.contains(&ids[0]) || id_remove.contains(&ids[1])){
-                if iris_color::OkLab::from_rgb(&self.color_list[ids[0]].to_rgb()).distance_to_lab(&iris_color::OkLab::from_rgb(&self.color_list[ids[1]].to_rgb())) <= 0.01{
+                if iris_color::OkLab::from_rgb(&self.color_list[ids[0]].to_rgb()).distance_to_lab(&iris_color::OkLab::from_rgb(&self.color_list[ids[1]].to_rgb())) <= self.clean_up_value{
                     let other_value = self.color_list[ids[1]].clone();
                     let other_percent = self.color_percent[ids[1]].clone();
                     let other_pixel = self.color_pixel_count[ids[1]].clone();
