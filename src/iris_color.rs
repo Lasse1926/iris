@@ -413,20 +413,21 @@ impl HSL {
 
         if delta.abs() <= 0.0001 {
             h = 0.0;
-        }
-        if (v_max - r).abs() <= 0.0001{
-            h = 60.0 * (((g-b)/delta)%6.0);
-            if h < 0.0 {
-                h = h + 360.0;
+        }else{
+            if (v_max - r).abs() <= 0.0001{
+                h = 60.0 * (((g-b)/delta)%6.0);
+                if h < 0.0 {
+                    h = h + 360.0;
+                }
             }
-        }
 
-        if (v_max - g).abs() <= 0.0001{
-            h = 60.0 * (((b-r)/delta)+2.0);
-        }
+            if (v_max - g).abs() <= 0.0001{
+                h = 60.0 * (((b-r)/delta)+2.0);
+            }
 
-        if (v_max - b).abs() <= 0.0001{
-            h = 60.0 * (((r-g)/delta)+4.0);
+            if (v_max - b).abs() <= 0.0001{
+                h = 60.0 * (((r-g)/delta)+4.0);
+            }
         }
 
         let l = (v_max+v_min) / 2.0;
