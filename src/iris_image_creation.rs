@@ -1,5 +1,7 @@
 use image::{Pixel, Rgb, RgbImage};
 
+use crate::iris_color::AvarageRgb;
+
 use super::WINDOW_ID;
 use super::iris_color;
 
@@ -108,6 +110,9 @@ impl HSLRect {
         HSLRect{size,obj:vec![],hue,img_rect,img_bar}
     }
     pub fn generate_sl_rect(&mut self){
+        if self.obj.len() > 0 {
+            self.hue = iris_color::HSL::from_rgb(&self.obj[0].rgb).h;
+        }
         for x in 0..self.size[0] {
             for y in 0..self.size[1]{
                 self.img_rect.put_pixel(x, y,self.pos_to_rgb_rect([x,y]));
@@ -145,6 +150,25 @@ impl HSLRect {
         let mut clone_obj = self.obj.clone();
         for m in clone_obj.iter_mut() {
             m.draw_bar(self);
+        }
+    }
+    pub fn add_marker(&mut self,new_color:&mut AvarageRgb,size:u32,border_size:u32) -> bool {
+        if new_color.marked{
+            let new_marker = RGBMarker::new(new_color.to_rgb(),size,border_size);
+            self.obj.push(new_marker);
+            return true;
+        }else{
+            return false;
+        }
+    }
+    pub fn remove_marker(&mut self,new_color:&mut AvarageRgb) -> bool {
+        let rgb = new_color.to_rgb();
+        let index = self.obj.iter().position(|r| r.rgb == rgb); 
+        if let Some(i) = index {
+            self.obj.remove(i);
+            return true;
+        }else{
+            return false;
         }
     }
     pub fn pos_to_rgb_bar(&self,x:f32) -> Rgb<u8> {

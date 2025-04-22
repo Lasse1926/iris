@@ -45,14 +45,22 @@ pub fn rgb_distance_squared(col_a:Rgb<u8>,col_b:Rgb<u8>) -> f32{
 
 pub fn color_display(ui: &mut egui::Ui,color: &mut AvarageRgb) -> egui::Response {
     if let Some(texture) = &color.texture {
-        let response = egui::Image::from_texture(texture).sense(egui::Sense::CLICK).ui(ui).on_hover_text(format!("r:{}|g:{}|b:{}",color.r,color.g,color.b)) ;
-        if response.clicked() {
-            color.color_info_window_open = true;
-        }
-        response.widget_info(|| {
-            egui::WidgetInfo::selected(egui::WidgetType::Image,ui.is_enabled(),color.color_info_window_open,"Display Color")
-        });
-        response
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
+            ui.set_width(texture.size()[0] as f32);
+            let img_widget = egui::Image::from_texture(texture); 
+            let img_size = img_widget.size().unwrap();
+            let response = img_widget.sense(egui::Sense::CLICK).ui(ui)
+                .on_hover_text(format!("r:{}|g:{}|b:{}",color.r,color.g,color.b));
+            let min = egui::pos2(response.rect.min.x + img_size[0]/2.0 + 5.0,response.rect.min.y + img_size[1]/2.0);
+            let target = egui::Rect{max:response.rect.max,min};
+            ui.put(target,egui::Checkbox::without_text(&mut color.marked));
+            if response.clicked() {
+                color.color_info_window_open = true;
+            }
+            response.widget_info(|| {
+                egui::WidgetInfo::selected(egui::WidgetType::Image,ui.is_enabled(),color.color_info_window_open,"Display Color")
+            });
+        }).response
     }else {
         let (_,response) = ui.allocate_exact_size(egui::vec2(0.0,0.0), egui::Sense::click());
         response
@@ -83,6 +91,7 @@ pub struct AvarageRgb {
     pub img_rect:Option<egui::TextureHandle>,
     pub img_bar:Option<egui::TextureHandle>,
     pub img_dispaly_generated:bool,
+    pub marked:bool,
 }
 
 impl Debug for AvarageRgb {
@@ -120,6 +129,7 @@ impl AvarageRgb {
                 img_bar: None,
                 img_rect: None,
                 img_dispaly_generated: false,
+                marked: false,
             }
         })
     }

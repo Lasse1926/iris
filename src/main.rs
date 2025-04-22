@@ -33,6 +33,7 @@ struct ImageWindow {
     reload_hsl_rect:bool,
     reload_hsl_bar:bool,
     clean_up_value:f32,
+    mark_every_color:bool,
 }
 
 #[derive(Debug,PartialEq)]
@@ -82,6 +83,7 @@ impl ImageWindow {
                 reload_hsl_rect:false,
                 reload_hsl_bar:false,
                 clean_up_value,
+                mark_every_color:false,
             }
 
         })
@@ -115,7 +117,7 @@ impl ImageWindow {
             img.obj.clear();
             for (id,c) in color_sorted{
                 if self.color_percent[id] >= self.color_display_threshhold {
-                    img.obj.push(iris_image_creation::RGBMarker::new(c.to_rgb(),5,2));
+                    img.add_marker(c,5,2);
                 }
             }
             img.generate_h_bar();
@@ -176,6 +178,11 @@ impl ImageWindow {
                         ui.selectable_value(&mut self.compare_state,CompareState::Saturation , "Saturation");
                     }
                 );
+                if ui.checkbox(&mut self.mark_every_color,"Select every color").clicked(){
+                    for (_id,c) in &mut self.color_list{
+                       c.marked = self.mark_every_color; 
+                    }
+                };
                 match self.compare_state {
                     CompareState::Percentages => {  // ----------PERCENTAGE GUI
                         let mut color_sorted:Vec<_> = self.color_list.iter_mut().collect();
