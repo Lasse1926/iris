@@ -163,12 +163,10 @@ impl AvarageRgb {
         self.r = 254.min(((r + new_r.pow(2))/(self.color_n+1)).isqrt())as u8;
         self.g = 254.min(((g + new_g.pow(2))/(self.color_n+1)).isqrt())as u8;
         self.b = 254.min(((b + new_b.pow(2))/(self.color_n+1)).isqrt())as u8;
-        if color_grad > 0.1 {
-            let difference = self.colors.contains(&AvarageRgb::from_rgb(*comp));
-            if !difference && OkLab::from_rgb(&self.to_rgb()).distance_to_lab(&OkLab::from_rgb(comp)) >= 0.1{
-                self.colors.push(AvarageRgb::from_rgb(*comp));
-            }
-        } 
+        let difference = self.colors.contains(&AvarageRgb::from_rgb(*comp));
+        if !difference {
+            self.colors.push(AvarageRgb::from_rgb(*comp));
+        }
         self.color_n += 1;
 
     }
@@ -248,7 +246,7 @@ impl fmt::Display for AvarageRgb {
 
 impl PartialEq for AvarageRgb {
     fn eq(&self, other: &Self) -> bool {
-        rgb_distance(self.to_rgb(),other.to_rgb()) <= 5.0
+        rgb_distance(self.to_rgb(),other.to_rgb()) <= 3.0
     }
 }
 

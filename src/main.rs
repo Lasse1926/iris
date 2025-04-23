@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
 use std::fmt::Debug;
-use std::{collections::HashMap,fmt, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
-use egui::{Color32, ColorImage, DroppedFile, Vec2, Widget};
-use image::{GenericImageView, ImageReader, Pixel, Rgb};
+use egui::{Color32, ColorImage, DroppedFile, Vec2};
+use image::{GenericImageView, ImageReader, Pixel};
 use itertools::Itertools;
 
 mod iris_color;
@@ -165,7 +165,7 @@ impl ImageWindow {
                     _=> color_deg_max = 0.0,
                 }
                 ui.add(egui::Slider::new(&mut self.color_gradation,0.0 ..= color_deg_max).text("Color Gradation"));
-                ui.add(egui::Slider::new(&mut self.clean_up_value,0.0 ..= 0.1).text("Color Gradation"))
+                ui.add(egui::Slider::new(&mut self.clean_up_value,0.0 ..= 0.1).text("Clean up Threshold"))
                     .on_hover_text("Minimum Color distance in OKLab, at which colors get merged after scan. \n (to clean up Duplicate Colors)");
                 if ui.add(egui::Button::new("Scan")).clicked(){
                     self.scan_image(ui);
