@@ -77,7 +77,6 @@ pub fn color_display_percent(ui: &mut egui::Ui,color: &mut AvarageRgb,percent:f3
         }).response
 }
 
-#[derive(Clone)]
 pub struct AvarageRgb {
     pub r:u8,
     pub g:u8,
@@ -92,6 +91,46 @@ pub struct AvarageRgb {
     pub img_bar:Option<egui::TextureHandle>,
     pub img_dispaly_generated:bool,
     pub marked:bool,
+}
+
+impl Clone for AvarageRgb {
+    fn clone(&self) -> Self {
+        WINDOW_ID.with(|thread_id|{
+            let r = self.r.clone();
+            let g = self.g.clone();
+            let b = self.b.clone();
+            
+            let color_n = self.color_n.clone();
+            let texture = self.texture.clone();
+            let colors = self.colors.clone();
+            let color_info_window_open = false;
+
+            let id = thread_id.get();
+            thread_id.set(id+1);
+
+            let img = self.img.clone();
+            let img_rect = self.img_rect.clone();
+            let img_bar = self.img_bar.clone();
+            let img_dispaly_generated = self.img_dispaly_generated.clone();
+            let marked = false;
+
+            Self { 
+                r,
+                g,
+                b,
+                color_n,
+                texture,
+                colors,
+                color_info_window_open,
+                id,
+                img,
+                img_rect,
+                img_bar,
+                img_dispaly_generated,
+                marked 
+            }
+        })
+    }
 }
 
 impl Debug for AvarageRgb {

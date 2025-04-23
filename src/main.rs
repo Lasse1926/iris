@@ -421,6 +421,7 @@ impl ImageWindow {
 struct MyEguiApp {
     image_windows:Vec<ImageWindow>,
     image_creation_windows:Vec<iris_image_creation::ImageCreator>,
+    global_colors:Vec<iris_color::AvarageRgb>,
 }
 
 impl MyEguiApp {
@@ -440,10 +441,51 @@ impl MyEguiApp {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         Self::default()
     }
+    fn get_selected_colors(&mut self){
+        for iw in self.image_windows.iter() {
+            for (_,c) in iw.color_list.iter(){
+                if c.marked {
+                    if !self.global_colors.contains(c){
+                        self.global_colors.push(c.clone());
+                    }
+                }else{
+                    for sub_c in c.colors.iter() {
+                        if sub_c.marked && !self.global_colors.contains(sub_c){
+                            self.global_colors.push(sub_c.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for MyEguiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::TopBottomPanel::top("ToolBar").show(ctx, |ui| {
+            if ui.add(egui::Button::new("Image Creation")).clicked(){
+                self.image_creation_windows.push(iris_image_creation::ImageCreator::new());
+            }
+        });
+        egui::SidePanel::left("ColorPanle").show(ctx,|ui| {
+            if ui.button("Get Colors").on_hover_text("Copies every selected Color into Your Color Palet").clicked(){
+                self.get_selected_colors();
+            } 
+            egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
+                let aw = ui.available_width();
+                egui::Grid::new("global_Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
+                    let mut column_count = 0;
+                    for c in self.global_colors.iter_mut(){
+                        iris_color::color_display(ui,c);
+                        column_count += 1;
+                        if column_count > (aw/(ui.available_width()+3.0)) as i32 {
+                            ui.end_row();
+                            column_count = 0;
+                        }
+                    }
+                });
+            });
+        });
         egui::CentralPanel::default().show(ctx, |ui| {
             let mut image_window_to_remove:Vec<usize> = vec![];
             let mut image_creation_windows_to_remove:Vec<usize> = vec![];
@@ -464,10 +506,10 @@ impl eframe::App for MyEguiApp {
             for index in image_window_to_remove{
                 self.image_windows.remove(index);
             }
-            if ui.add(egui::Button::new("iw")).clicked(){
-                self.image_creation_windows.push(iris_image_creation::ImageCreator::new());
-            }
         }); 
+        for color in self.global_colors.iter_mut() {
+            color.color_info_window_show(ctx);
+        }
     }
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         if raw_input.dropped_files.len() >= 1 {
