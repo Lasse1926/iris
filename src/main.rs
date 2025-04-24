@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
-use std::fmt::Debug;
+use std::fmt::{format, Debug};
 use std::{collections::HashMap, path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
 use egui::{Color32, ColorImage, DroppedFile, Vec2};
-use image::{GenericImageView, ImageReader, Pixel};
+use image::{GenericImageView, ImageReader, Pixel, Rgb};
 use itertools::Itertools;
 
 mod iris_color;
@@ -25,7 +25,11 @@ struct ImageWindow {
     color_gradation:f32,
     color_dist_type:iris_color::ColorSpace,
     color_display_threshhold:f32,
+
     compare_state:CompareState,
+
+    avaraging_system:AvarageingSystem,
+
     img: Option<iris_image_creation::HSLRect>,
     img_rect:Option<egui::TextureHandle>,
     img_bar:Option<egui::TextureHandle>,
@@ -40,6 +44,13 @@ struct ImageWindow {
 enum CompareState {
     Percentages,
     Saturation,
+}
+
+#[derive(Debug,PartialEq)]
+enum AvarageingSystem {
+    DeltaE,
+    MedianColor,
+    MedianCuttin,
 }
 
 thread_local!(static WINDOW_ID: Cell<usize> = Cell::new(0));
@@ -63,6 +74,7 @@ impl ImageWindow {
             let color_dist_type = iris_color::ColorSpace::OkLab;
             let color_display_threshhold = 0.01;
             let compare_state = CompareState::Percentages;
+            let avaraging_system = AvarageingSystem::DeltaE;
             let clean_up_value = 0.01;
             ImageWindow{
                 path,
@@ -76,6 +88,7 @@ impl ImageWindow {
                 color_dist_type,
                 color_display_threshhold,
                 compare_state,
+                avaraging_system,
                 img: None,
                 img_bar: None,
                 img_rect: None,
@@ -148,27 +161,45 @@ impl ImageWindow {
                 ui.add(
                     egui::Image::new(string_path).shrink_to_fit()
                 ); 
+                egui::ComboBox::from_label("Select Avaraging Technique")
+                    .selected_text(format!("{:?}",self.avaraging_system))
+                    .show_ui(ui,|ui|{
+                        ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::MedianCuttin,"Median Cutting");
+                        ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::DeltaE,"Delta E");
+                        ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::MedianColor,"Median Color");
+                    });
+                ui.separator();
+                match self.avaraging_system {
 
-                egui::ComboBox::from_label("Select Color Space for distance")
-                    .selected_text(format!("{:?}", self.color_dist_type))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::Rgb, "RGB");
-                        ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::CieLab, "CieLab");
-                        ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::OkLab, "OkLab");
+                    AvarageingSystem::DeltaE => {
+                        egui::ComboBox::from_label("Select Color Space for distance")
+                            .selected_text(format!("{:?}", self.color_dist_type))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::Rgb, "RGB");
+                                ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::CieLab, "CieLab");
+                                ui.selectable_value(&mut self.color_dist_type, iris_color::ColorSpace::OkLab, "OkLab");
+                            }
+                        );
+                        let color_deg_max:f32;
+                        match self.color_dist_type {
+                            iris_color::ColorSpace::CieLab => color_deg_max = 300.0,
+                            iris_color::ColorSpace::OkLab => color_deg_max = 2.0,
+                            iris_color::ColorSpace::Rgb => color_deg_max = 500.0,
+                            _=> color_deg_max = 0.0,
+                        }
+                        ui.add(egui::Slider::new(&mut self.color_gradation,0.0 ..= color_deg_max).text("Color Gradation"));
+                        ui.add(egui::Slider::new(&mut self.clean_up_value,0.0 ..= 0.1).text("Clean up Threshold"))
+                            .on_hover_text("Minimum Color distance in OKLab, at which colors get merged after scan. \n (to clean up Duplicate Colors)");
+                        if ui.add(egui::Button::new("Scan")).clicked(){
+                            self.scan_image_delta_e(ui);
+                        }
                     }
-                );
-                let color_deg_max:f32;
-                match self.color_dist_type {
-                    iris_color::ColorSpace::CieLab => color_deg_max = 300.0,
-                    iris_color::ColorSpace::OkLab => color_deg_max = 2.0,
-                    iris_color::ColorSpace::Rgb => color_deg_max = 500.0,
-                    _=> color_deg_max = 0.0,
-                }
-                ui.add(egui::Slider::new(&mut self.color_gradation,0.0 ..= color_deg_max).text("Color Gradation"));
-                ui.add(egui::Slider::new(&mut self.clean_up_value,0.0 ..= 0.1).text("Clean up Threshold"))
-                    .on_hover_text("Minimum Color distance in OKLab, at which colors get merged after scan. \n (to clean up Duplicate Colors)");
-                if ui.add(egui::Button::new("Scan")).clicked(){
-                    self.scan_image(ui);
+                    AvarageingSystem::MedianColor => {
+                        if ui.button("Scan for Median Color").clicked(){
+                            self.scan_image_median_color(ui);
+                        }
+                    },
+                    AvarageingSystem::MedianCuttin => (),
                 }
                 ui.separator();
                 egui::ComboBox::from_label("Sorted by")
@@ -312,11 +343,68 @@ impl ImageWindow {
             self.open = window_open;
         }
     }    
-    fn scan_image(&mut self,ui:&mut egui::Ui){
+    fn scan_image_median_color(&mut self,ui:&mut egui::Ui){
+
+        self.color_percent = HashMap::new();
+        self.color_list = HashMap::new();
+
+        let mut color_vec:Vec<Rgb<u8>> = vec![];
+
+        let image = ImageReader::open(self.path.clone()).unwrap().decode().unwrap(); 
+        let size = image.width() as f64 * image.height() as f64;
+
+        for (_x,_y,rgba) in image.pixels(){
+            if !(rgba.channels()[3]<= 0){
+                let rgb = rgba.to_rgb();
+                color_vec.push(rgb);
+            }
+        }
+        
+        color_vec.sort_by(|a,b| a.0[0].partial_cmp(&b.0[0]).unwrap());
+        let r:u8; 
+        if color_vec.len() % 2 == 0 {
+            let upper = color_vec[color_vec.len()/2].0[0];
+            let lower = color_vec[(color_vec.len()/2)-1].0[0];
+
+            r = ((upper as u32 + lower as u32)/2).min(255) as u8;
+        }else{
+            r = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].0[0];
+        }
+        let g:u8; 
+        if color_vec.len() % 2 == 0 {
+            let upper = color_vec[color_vec.len()/2].0[1];
+            let lower = color_vec[(color_vec.len()/2)-1].0[1];
+
+            g = ((upper as u32 + lower as u32)/2).min(255) as u8;
+        }else{
+            g = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].0[1];
+        }
+        let b:u8; 
+        if color_vec.len() % 2 == 0 {
+            let upper = color_vec[color_vec.len()/2].0[2];
+            let lower = color_vec[(color_vec.len()/2)-1].0[2];
+
+            b = ((upper as u32 + lower as u32)/2).min(255) as u8;
+        }else{
+            b = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].0[2];
+        }
+
+        let median_color:Rgb<u8> = Rgb::from([r,g,b]);
+        let mut avarage_median = iris_color::AvarageRgb::from_rgb(median_color);
+        avarage_median.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(avarage_median.r, avarage_median.g, avarage_median.b)),Default::default()));
+
+        self.color_list.insert(0,avarage_median);
+        self.color_percent.insert(0,1.0);
+        self.color_pixel_count.insert(0,size as u32);
+
+
+    }
+    fn scan_image_delta_e(&mut self,ui:&mut egui::Ui){
         let image = ImageReader::open(self.path.clone()).unwrap().decode().unwrap(); 
         let size = image.width() as f64 * image.height() as f64;
         self.color_percent = HashMap::new();
         self.color_list = HashMap::new();
+        self.color_pixel_count = HashMap::new();
         let mut max_dist = f32::MIN;
         let mut min_dist = f32::MAX;
         let mut transparent_pixels:f64 = 0.0;
