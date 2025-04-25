@@ -598,7 +598,7 @@ impl eframe::App for MyEguiApp {
                    c.marked = self.mark_every_color; 
                 }
             };
-            egui::ScrollArea::vertical().auto_shrink([false,true]).show(ui, |ui| {
+            egui::ScrollArea::vertical().max_height(ui.available_height()-24.0).auto_shrink([false,true]).show(ui, |ui| {
                 let aw = ui.available_width();
                 egui::Grid::new("global_Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
                     let mut column_count = 0;
@@ -612,6 +612,7 @@ impl eframe::App for MyEguiApp {
                     }
                 });
             });
+            ui.spacing();
             if ui.button("Compare").on_hover_text("Compare selected colors").clicked(){
                 self.compare_window.push(ColorCompareWindow::new(self.get_selected_colors()));
             }
