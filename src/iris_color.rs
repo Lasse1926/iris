@@ -91,6 +91,7 @@ pub struct AvarageRgb {
     pub img_bar:Option<egui::TextureHandle>,
     pub img_dispaly_generated:bool,
     pub marked:bool,
+    pub mark_every_color:bool,
 }
 
 impl Clone for AvarageRgb {
@@ -127,7 +128,8 @@ impl Clone for AvarageRgb {
                 img_rect,
                 img_bar,
                 img_dispaly_generated,
-                marked 
+                marked,
+                mark_every_color:false,
             }
         })
     }
@@ -169,6 +171,7 @@ impl AvarageRgb {
                 img_rect: None,
                 img_dispaly_generated: false,
                 marked: false,
+                mark_every_color:false,
             }
         })
     }
@@ -250,6 +253,11 @@ impl AvarageRgb {
                         }
                     };
                 });
+                if ui.checkbox(&mut self.mark_every_color,"Select every color").clicked(){
+                    for c in &mut self.colors.iter_mut(){
+                       c.marked = self.mark_every_color; 
+                    }
+                };
                 egui::CollapsingHeader::new("Colors").show(ui,|ui|{
                     if self.colors.len() > 0 {
                         egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {

@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::fmt::{format, Debug};
+use std::fmt::Debug;
 use std::{collections::HashMap, path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
@@ -509,7 +509,10 @@ impl ImageWindow {
 struct MyEguiApp {
     image_windows:Vec<ImageWindow>,
     image_creation_windows:Vec<iris_image_creation::ImageCreator>,
+    color_to_add:[f32;3],
     global_colors:Vec<iris_color::AvarageRgb>,
+    compare_window:Vec<ColorCompareWindow>,
+    mark_every_color:bool,
 }
 
 impl MyEguiApp {
@@ -529,12 +532,17 @@ impl MyEguiApp {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         Self::default()
     }
-    fn get_selected_colors(&mut self){
+    fn get_global_selected_colors(&mut self){
         for iw in self.image_windows.iter() {
             for (_,c) in iw.color_list.iter(){
                 if c.marked {
                     if !self.global_colors.contains(c){
                         self.global_colors.push(c.clone());
+                    }
+                    for sub_c in c.colors.iter() {
+                        if sub_c.marked && !self.global_colors.contains(sub_c){
+                            self.global_colors.push(sub_c.clone());
+                        }
                     }
                 }else{
                     for sub_c in c.colors.iter() {
@@ -545,6 +553,20 @@ impl MyEguiApp {
                 }
             }
         }
+    }
+    fn get_selected_colors(&self)->Vec<iris_color::AvarageRgb>{
+        let mut color_to_return:Vec<iris_color::AvarageRgb> = vec![]; 
+        for c in self.global_colors.iter() {
+            if c.marked {
+                color_to_return.push(c.clone());
+            }
+            for sub_c in c.colors.iter() {
+                if sub_c.marked && !self.global_colors.contains(sub_c){
+                    color_to_return.push(sub_c.clone());
+                }
+            }
+        }
+        color_to_return
     }
 }
 
@@ -557,9 +579,26 @@ impl eframe::App for MyEguiApp {
         });
         egui::SidePanel::left("ColorPanle").show(ctx,|ui| {
             if ui.button("Get Colors").on_hover_text("Copies every selected Color into Your Color Palet").clicked(){
-                self.get_selected_colors();
-            } 
-            egui::ScrollArea::vertical().max_height(100.0).auto_shrink([false,true]).show(ui, |ui| {
+                self.get_global_selected_colors();
+            }
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui| {
+                ui.color_edit_button_rgb(&mut self.color_to_add);
+                if ui.button("+").on_hover_text("Add displayed Color to your color palette").clicked(){
+                    let r = (self.color_to_add[0] * 255.0).min(255.0) as u8; 
+                    let g = (self.color_to_add[1] * 255.0).min(255.0) as u8; 
+                    let b = (self.color_to_add[2] * 255.0).min(255.0) as u8; 
+                    let mut color = iris_color::AvarageRgb::from_rgb(Rgb::from([r,g,b]));
+                    color.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(r,g,b)),Default::default()));
+
+                    self.global_colors.push(color);
+                };
+            });
+            if ui.checkbox(&mut self.mark_every_color,"Select every color").clicked(){
+                for c in &mut self.global_colors.iter_mut(){
+                   c.marked = self.mark_every_color; 
+                }
+            };
+            egui::ScrollArea::vertical().auto_shrink([false,true]).show(ui, |ui| {
                 let aw = ui.available_width();
                 egui::Grid::new("global_Colors").spacing(Vec2::new(0.0,3.0)).show(ui,|ui|{
                     let mut column_count = 0;
@@ -573,6 +612,20 @@ impl eframe::App for MyEguiApp {
                     }
                 });
             });
+            if ui.button("Compare").on_hover_text("Compare selected colors").clicked(){
+                self.compare_window.push(ColorCompareWindow::new(self.get_selected_colors()));
+            }
+            let mut compare_window_to_delete:Vec<usize> = vec![];
+            for (index,w) in self.compare_window.iter_mut().enumerate() {
+                if w.window_open {
+                    w.show(ctx);
+                }else{
+                    compare_window_to_delete.push(index);
+                }
+            }
+            for i in compare_window_to_delete {
+                self.compare_window.remove(i);
+            }
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             let mut image_window_to_remove:Vec<usize> = vec![];
@@ -607,6 +660,49 @@ impl eframe::App for MyEguiApp {
                 }
             }
         }
+    }
+}
+
+struct ColorCompareWindow {
+    img:iris_image_creation::PieColorComp,
+    texture:Option<egui::TextureHandle>,
+    colors:Vec<iris_color::AvarageRgb>,
+    id:usize,
+    window_open:bool,
+}
+
+impl ColorCompareWindow {
+    fn new(colors:Vec<iris_color::AvarageRgb>) -> Self {
+        WINDOW_ID.with(|thread_id|{
+            let img = iris_image_creation::PieColorComp::new(colors.clone(),128);
+            let texture:Option<egui::TextureHandle> = None;
+            let id = thread_id.get();
+            thread_id.set(id+1);
+            Self{
+                img,
+                texture,
+                colors,
+                id,
+                window_open:true,
+            }
+        })
+    } 
+    fn show(&mut self,ctx:&egui::Context){
+        if self.texture.is_none(){
+            self.img.generate_pie();
+            self.texture = Some(ctx.load_texture("comp_img",ColorImage::from_rgb([self.img.size.try_into().unwrap(),self.img.size.try_into().unwrap()],&self.img.img),Default::default()));
+        } 
+        if self.window_open {
+            let mut window_open_buffer = self.window_open;
+            egui::Window::new("Compare").id(egui::Id::new(self.id)).open(&mut window_open_buffer).show(ctx,|ui|{
+                if let Some(texture) = &self.texture {
+                    ui.add(
+                        egui::Image::from_texture(texture)
+                    );
+                }
+            });
+            self.window_open = window_open_buffer;
+        } 
     }
 }
     

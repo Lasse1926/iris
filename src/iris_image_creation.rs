@@ -1,3 +1,6 @@
+use std::f32::consts::PI;
+
+use eframe::glow::ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH;
 use image::{Pixel, Rgb, RgbImage};
 
 use crate::iris_color::AvarageRgb;
@@ -29,15 +32,14 @@ impl ImageCreator {
             let mut window_open = self.open;
             egui::Window::new("ImageCreator").id(egui::Id::new(self.id)).open(&mut window_open).show(ctx,|ui|{
                 if ui.add(egui::Button::new("gen")).clicked() {
-                    let mut rect = HSLRect::new([320,160],313.0); 
-                    let mark = RGBMarker::new(Rgb::from([129,50,112]),20,5);
-                    let mark1 = RGBMarker::new(Rgb::from([60, 35, 226]),20,5);
-                    let mark2 = RGBMarker::new(Rgb::from([255, 200, 22]),20,5);
-                    rect.obj.push(mark);
-                    rect.obj.push(mark1);
-                    rect.obj.push(mark2);
-                    rect.generate_sl_rect();
-                    rect.generate_h_bar();
+                    let mut rect = PieColorComp::new(vec![
+                        AvarageRgb::from_rgb(Rgb::from([255,0,0])),
+                        AvarageRgb::from_rgb(Rgb::from([0,255,0])),
+                        // AvarageRgb::from_rgb(Rgb::from([127,255,0])),
+                        AvarageRgb::from_rgb(Rgb::from([0,0,255]))
+                    ],64);
+                    rect.generate_pie();
+                    rect.save_img();
                 }
             });
             self.open = window_open;
@@ -248,4 +250,52 @@ impl Draw for RGBMarker{
             }
         }
     }
+}
+
+pub struct PieColorComp {
+    pub img:RgbImage,
+    pub size:u32,
+    pub colors:Vec<AvarageRgb>
+}
+
+impl PieColorComp {
+    pub fn new(colors:Vec<AvarageRgb>,size:u32) -> Self {
+        let img = RgbImage::new(size,size);
+        Self {
+            img,
+            size,
+            colors,
+        }
+    }
+
+    pub fn generate_pie(&mut self){
+        for x in 0..self.size{
+            for y in 0..self.size{
+                let b_length = ((x as f32 - self.size as f32/2.0).powf(2.0) + (y as f32 - self.size as f32/2.0).powf(2.0)).sqrt();
+                let mut angle = ((y as f32- self.size as f32/2.0)/b_length).acos();
+                if x >= self.size/2 {
+                    angle = PI*2.0 - angle;
+                }
+                let color_angle_step = PI*2.0 / self.colors.len() as f32;
+                let vec_to_center = [self.size as f32/2.0 - x as f32,self.size as f32/2.0 - y as f32];
+                let dist_to_center = (vec_to_center[0].powf(2.0) + vec_to_center[1].powf(2.0)).sqrt();
+                if self.colors.len() > 0 && dist_to_center <= self.size as f32 /2.0 - (self.size/10).min(5) as f32 {
+                    let target_color = (angle/color_angle_step).floor() as usize;
+                    if target_color < self.colors.len() {
+                        self.img.put_pixel(x, y,self.colors[target_color].to_rgb());
+                    }else{
+                        self.img.put_pixel(x, y,self.colors[0].to_rgb());
+                    }
+                }else {
+                    self.img.put_pixel(x, y,Rgb::from([0,0,0]));
+                }
+
+            }
+        }
+    }
+
+    pub fn save_img(&self){
+        let _ = self.img.save("./created_images/pie_color_comp.png");
+    }
+    
 }
