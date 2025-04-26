@@ -1,8 +1,10 @@
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::{collections::HashMap, path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
+use egui::epaint::color;
 use egui::{Color32, ColorImage, DroppedFile, Vec2};
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
 use itertools::Itertools;
@@ -38,6 +40,7 @@ struct ImageWindow {
     reload_hsl_bar:bool,
     clean_up_value:f32,
     mark_every_color:bool,
+    median_cut_amount:u32,
 }
 
 #[derive(Debug,PartialEq)]
@@ -53,6 +56,11 @@ enum AvarageingSystem {
     MedianCuttin,
 }
 
+#[derive(Clone)]
+struct MedianCut {
+    median_color:[u8;3],
+    colors:Vec<[u8;3]>,
+}
 thread_local!(static WINDOW_ID: Cell<usize> = Cell::new(0));
 
 
@@ -97,6 +105,7 @@ impl ImageWindow {
                 reload_hsl_bar:false,
                 clean_up_value,
                 mark_every_color:false,
+                median_cut_amount:0,
             }
 
         })
@@ -199,7 +208,12 @@ impl ImageWindow {
                             self.scan_image_median_color(ui);
                         }
                     },
-                    AvarageingSystem::MedianCuttin => (),
+                    AvarageingSystem::MedianCuttin => {
+                        ui.add(egui::Slider::new(&mut self.median_cut_amount,0 ..= 100).text("Median Cut amount"));
+                        if ui.button("Scan").clicked(){
+                            self.scan_image_median_cutting(ui);
+                        }
+                    },
                 }
                 ui.separator();
                 egui::ComboBox::from_label("Sorted by")
@@ -359,7 +373,7 @@ impl ImageWindow {
                 color_vec.push(rgb);
             }
         }
-        
+         
         color_vec.sort_by(|a,b| a.0[0].partial_cmp(&b.0[0]).unwrap());
         let r:u8; 
         if color_vec.len() % 2 == 0 {
@@ -399,6 +413,134 @@ impl ImageWindow {
 
 
     }
+    fn get_median_color(&self,colors:&mut Vec<[u8;3]>) -> [u8;3] {
+        colors.sort_by(|a,b| a[0].partial_cmp(&b[0]).unwrap());
+        let r:u8; 
+        if colors.len() == 1 {
+            return colors[0];
+        }
+        if colors.len() % 2 == 0 {
+            let upper = colors[colors.len()/2][0];
+            let lower = colors[(colors.len()/2)-1][0];
+
+            r = ((upper as u32 + lower as u32)/2).min(255) as u8;
+        }else{
+            r = colors[(colors.len() as f32/2.0).ceil() as usize][0];
+        }
+        let g:u8; 
+        if colors.len() % 2 == 0 {
+            let upper = colors[colors.len()/2][1];
+            let lower = colors[(colors.len()/2)-1][1];
+
+            g = ((upper as u32 + lower as u32)/2).min(255) as u8;
+        }else{
+            g = colors[(colors.len() as f32/2.0).ceil() as usize][1];
+        }
+        let b:u8; 
+        if colors.len() % 2 == 0 {
+            let upper = colors[colors.len()/2][2];
+            let lower = colors[(colors.len()/2)-1][2];
+
+            b = ((upper as u32 + lower as u32)/2).min(255) as u8;
+        }else{
+            b = colors[(colors.len() as f32/2.0).ceil() as usize][2];
+        }
+
+        [r,g,b]
+    }
+
+    fn scan_image_median_cutting(&mut self, ui:&mut egui::Ui){
+        self.color_percent = HashMap::new();
+        self.color_list = HashMap::new();
+        self.color_pixel_count = HashMap::new();
+        let image = ImageReader::open(self.path.clone()).unwrap().decode().unwrap(); 
+        let _size = image.width() as f64 * image.height() as f64;
+
+        let mut color_rgb_values:HashSet<[u8;3]>= HashSet::new();
+       
+
+        for (_x,_y,rgba) in image.pixels(){
+            if !(rgba.channels()[3]<= 0){
+                let rgb = rgba.to_rgb();
+
+
+                if !color_rgb_values.contains(&rgb.0) {
+                    color_rgb_values.insert(rgb.0); 
+                }
+            }
+        }
+        let mut color_vec = color_rgb_values.into_iter().collect_vec();
+        let all_color_size = color_vec.len();
+        let mut cuts:Vec<MedianCut> = vec![MedianCut{median_color:self.get_median_color(&mut color_vec),colors:color_vec}];
+        for _ in 0..self.median_cut_amount {
+            let target = cuts.pop(); 
+            if let Some(mut t) = target {
+                let median_cut_pair = self.median_cut(&mut t.colors);
+                cuts.push(median_cut_pair[0].clone());
+                cuts.push(median_cut_pair[1].clone());
+            }
+            cuts.sort_by(|a,b| a.colors.len().partial_cmp(&b.colors.len()).unwrap());
+        }
+        for median_cut in cuts {
+            let mut avarage_median = iris_color::AvarageRgb::from_rgb(Rgb::from(median_cut.median_color));
+            for c in median_cut.colors.clone().into_iter() {
+                if c == median_cut.median_color {
+                    break;
+                }
+                let mut ac_buffer = iris_color::AvarageRgb::from_rgb(Rgb::from(c));
+                ac_buffer.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(ac_buffer.r, ac_buffer.g, ac_buffer.b)),Default::default()));
+                avarage_median.colors.push(ac_buffer);
+            }
+            avarage_median.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(avarage_median.r, avarage_median.g, avarage_median.b)),Default::default()));
+            let key = self.color_list.len() as u32;
+            self.color_list.insert(key,avarage_median);
+            self.color_percent.insert(key,median_cut.colors.len() as f32/all_color_size as f32);
+        }
+
+    }
+
+
+    fn median_cut(&self,colors:&mut Vec<[u8;3]>) -> [MedianCut;2] {
+        // range = [max,min]
+        let mut r_range:[u8;2] = [0,u8::MAX];
+        let mut g_range:[u8;2] = [0,u8::MAX];
+        let mut b_range:[u8;2] = [0,u8::MAX];
+
+        for c in colors.iter() {
+            r_range[0] = r_range[0].max(c[0]);
+            r_range[1] = r_range[1].min(c[0]);
+
+            g_range[0] = g_range[0].max(c[1]);
+            g_range[1] = g_range[1].min(c[1]);
+
+            b_range[0] = b_range[0].max(c[2]);
+            b_range[1] = b_range[1].min(c[2]);
+        }
+        let biggest_range:usize;
+
+        let r_range_num = r_range[0] - r_range[1];
+        let g_range_num = g_range[0] - g_range[1];
+        let b_range_num = b_range[0] - b_range[1];
+
+        if  r_range_num > g_range_num && r_range_num > b_range_num {
+            biggest_range = 0;
+        }else if g_range_num > r_range_num && g_range_num > b_range_num {
+            biggest_range = 1;
+        }else {
+            biggest_range = 2;
+        }
+        if !biggest_range < 3 {
+            panic!();
+        }
+        colors.sort_by(|a,b| a[biggest_range].partial_cmp(&b[biggest_range]).unwrap());
+        let median = colors.len()/2;
+        let mut top_slice = colors[0..median].to_vec();
+        let mut bot_slice = colors[median..colors.len()].to_vec();
+        let top_color = self.get_median_color(&mut top_slice);
+        let bot_color = self.get_median_color(&mut bot_slice);
+        [MedianCut{colors:top_slice,median_color:top_color},MedianCut{colors:bot_slice,median_color:bot_color}]
+    }
+
     fn scan_image_delta_e(&mut self,ui:&mut egui::Ui){
         let image = ImageReader::open(self.path.clone()).unwrap().decode().unwrap(); 
         let size = image.width() as f64 * image.height() as f64;
