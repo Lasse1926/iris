@@ -44,6 +44,9 @@ struct ImageWindow {
 
     avarage_saturation:f32,
     saturation_range:[f32;2],
+
+    avarage_lightness:f32,
+    lightness_range:[f32;2],
 }
 
 #[derive(Debug,PartialEq)]
@@ -89,8 +92,12 @@ impl ImageWindow {
             let compare_state = CompareState::Percentages;
             let avaraging_system = AvarageingSystem::DeltaE;
             let clean_up_value = 0.01;
+
             let avarage_saturation = 0.0;
             let saturation_range = [0.0,0.0];
+
+            let avarage_lightness = 0.0;
+            let lightness_range = [0.0,0.0];
 
             let main_img_size = [image.width(),image.height()];
             ImageWindow{
@@ -118,6 +125,8 @@ impl ImageWindow {
                 main_img_size,
                 avarage_saturation,
                 saturation_range,
+                avarage_lightness,
+                lightness_range,
             }
 
         })
@@ -213,20 +222,20 @@ impl ImageWindow {
                             .on_hover_text("Minimum Color distance in OKLab, at which colors get merged after scan. \n (to clean up Duplicate Colors)");
                         if ui.add(egui::Button::new("Scan")).clicked(){
                             self.scan_image_delta_e(ui);
-                            self.get_avarage_saturation();
+                            self.get_img_data();
                         }
                     }
                     AvarageingSystem::MedianColor => {
                         if ui.button("Scan for Median Color").clicked(){
                             self.scan_image_median_color(ui);
-                            self.get_avarage_saturation();
+                            self.get_img_data();
                         }
                     },
                     AvarageingSystem::MedianCuttin => {
-                        ui.add(egui::Slider::new(&mut self.median_cut_amount,0 ..= 100).text("Median Cut amount"));
+                        ui.add(egui::Slider::new(&mut self.median_cut_amount,0 ..= 100).text("Median Cut amount")).on_hover_text("n Cuts result in n+1 colors");
                         if ui.button("Scan").clicked(){
                             self.scan_image_median_cutting(ui);
-                            self.get_avarage_saturation();
+                            self.get_img_data();
                         }
                     },
                 }
@@ -365,8 +374,10 @@ impl ImageWindow {
                 }
                 egui::CollapsingHeader::new("Properties").show(ui,|ui|{
                     ui.label(format!("Size: {}x{}",self.main_img_size[0],self.main_img_size[1]));
-                    ui.label(format!("Avarage Saturation: {}%",self.avarage_saturation * 100.0));
-                    ui.label(format!("Saturation Range:\n   Max: {}%\n   Min: {}%",self.saturation_range[0] * 100.0,self.saturation_range[1] * 100.0));
+                    ui.label(format!("Avarage Saturation: {:.2}%",self.avarage_saturation * 100.0));
+                    ui.label(format!("Saturation Range:\n\tMax: {:.2}%\n\tMin: {:.2}%",self.saturation_range[0] * 100.0,self.saturation_range[1] * 100.0));
+                    ui.label(format!("Avarage Lightness: {:.2}%",self.avarage_lightness * 100.0));
+                    ui.label(format!("Lightness Range:\n\tMax: {:.2}%\n\tMin: {:.2}%",self.lightness_range[0] * 100.0,self.lightness_range[1] * 100.0));
                 });
                 for (_,color) in self.color_list.iter_mut(){
                     if color.color_info_window_open {
@@ -665,19 +676,30 @@ impl ImageWindow {
             self.color_pixel_count.remove(id);
         }
     }
-    fn get_avarage_saturation(&mut self){
+    fn get_img_data(&mut self){
         let mut avarage_sat:f32 = 0.0;
         let mut max_sat:f32 = 0.0;
         let mut min_sat:f32 = f32::MAX;
+
+        let mut avarage_light:f32 = 0.0;
+        let mut max_light:f32 = 0.0;
+        let mut min_light:f32 = f32::MAX;
         for (_,c) in self.color_list.iter() {
             let col_sat = iris_color::HSL::from_rgb(&c.to_rgb()).s;
+            let col_light = iris_color::HSL::from_rgb(&c.to_rgb()).l;
             avarage_sat += col_sat;
             max_sat = max_sat.max(col_sat);
             min_sat = min_sat.min(col_sat);
+
+            avarage_light += col_light;
+            max_light = max_light.max(col_light);
+            min_light = min_light.min(col_light);
         }
         avarage_sat = avarage_sat/self.color_list.len() as f32;
         self.avarage_saturation = avarage_sat;
         self.saturation_range = [max_sat,min_sat];
+        self.avarage_lightness = avarage_light/self.color_list.len() as f32;
+        self.lightness_range = [max_light,min_light]
     }
 }
 
