@@ -1,11 +1,10 @@
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap,path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
-use egui::epaint::color;
-use egui::{Color32, ColorImage, DroppedFile, Vec2};
+use egui::{widgets, Color32, ColorImage, DroppedFile, Vec2};
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
 use itertools::Itertools;
 
@@ -19,6 +18,7 @@ fn main() {
 struct ImageWindow {
     id:usize,
     path:PathBuf,
+    main_img_size:[u32;2],
     name:String,
     open:bool,
     color_list:HashMap<u32,iris_color::AvarageRgb>,
@@ -41,6 +41,9 @@ struct ImageWindow {
     clean_up_value:f32,
     mark_every_color:bool,
     median_cut_amount:u32,
+
+    avarage_saturation:f32,
+    saturation_range:[f32;2],
 }
 
 #[derive(Debug,PartialEq)]
@@ -71,6 +74,8 @@ impl ImageWindow {
         if path.file_stem().unwrap().to_str().unwrap().to_string().len() >= 10 {
             name = path.file_stem().unwrap().to_str().unwrap().to_string()[0..10].to_string() + "." + &path.extension().unwrap().to_string_lossy()
         }
+        let image = ImageReader::open(path.clone()).unwrap().decode().unwrap(); 
+        
         WINDOW_ID.with(|thread_id|{
             let id = thread_id.get();
             thread_id.set(id+1);
@@ -84,6 +89,10 @@ impl ImageWindow {
             let compare_state = CompareState::Percentages;
             let avaraging_system = AvarageingSystem::DeltaE;
             let clean_up_value = 0.01;
+            let avarage_saturation = 0.0;
+            let saturation_range = [0.0,0.0];
+
+            let main_img_size = [image.width(),image.height()];
             ImageWindow{
                 path,
                 name,
@@ -106,6 +115,9 @@ impl ImageWindow {
                 clean_up_value,
                 mark_every_color:false,
                 median_cut_amount:0,
+                main_img_size,
+                avarage_saturation,
+                saturation_range,
             }
 
         })
@@ -201,17 +213,20 @@ impl ImageWindow {
                             .on_hover_text("Minimum Color distance in OKLab, at which colors get merged after scan. \n (to clean up Duplicate Colors)");
                         if ui.add(egui::Button::new("Scan")).clicked(){
                             self.scan_image_delta_e(ui);
+                            self.get_avarage_saturation();
                         }
                     }
                     AvarageingSystem::MedianColor => {
                         if ui.button("Scan for Median Color").clicked(){
                             self.scan_image_median_color(ui);
+                            self.get_avarage_saturation();
                         }
                     },
                     AvarageingSystem::MedianCuttin => {
                         ui.add(egui::Slider::new(&mut self.median_cut_amount,0 ..= 100).text("Median Cut amount"));
                         if ui.button("Scan").clicked(){
                             self.scan_image_median_cutting(ui);
+                            self.get_avarage_saturation();
                         }
                     },
                 }
@@ -348,6 +363,11 @@ impl ImageWindow {
                         });
                     }
                 }
+                egui::CollapsingHeader::new("Properties").show(ui,|ui|{
+                    ui.label(format!("Size: {}x{}",self.main_img_size[0],self.main_img_size[1]));
+                    ui.label(format!("Avarage Saturation: {}%",self.avarage_saturation * 100.0));
+                    ui.label(format!("Saturation Range:\n   Max: {}%\n   Min: {}%",self.saturation_range[0] * 100.0,self.saturation_range[1] * 100.0));
+                });
                 for (_,color) in self.color_list.iter_mut(){
                     if color.color_info_window_open {
                         color.color_info_window_show(ui.ctx());
@@ -644,6 +664,20 @@ impl ImageWindow {
             self.color_percent.remove(id);
             self.color_pixel_count.remove(id);
         }
+    }
+    fn get_avarage_saturation(&mut self){
+        let mut avarage_sat:f32 = 0.0;
+        let mut max_sat:f32 = 0.0;
+        let mut min_sat:f32 = f32::MAX;
+        for (_,c) in self.color_list.iter() {
+            let col_sat = iris_color::HSL::from_rgb(&c.to_rgb()).s;
+            avarage_sat += col_sat;
+            max_sat = max_sat.max(col_sat);
+            min_sat = min_sat.min(col_sat);
+        }
+        avarage_sat = avarage_sat/self.color_list.len() as f32;
+        self.avarage_saturation = avarage_sat;
+        self.saturation_range = [max_sat,min_sat];
     }
 }
 
