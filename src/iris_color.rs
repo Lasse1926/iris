@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::fmt;
+use egui::Color32;
 use egui::ColorImage;
 use egui::Vec2;
 use egui::Widget;
@@ -182,6 +183,9 @@ impl AvarageRgb {
         self.img.generate_h_bar();
         self.img.generate_sl_rect();
         self.img_dispaly_generated = true;
+    }
+    pub fn generate_texture(&mut self,ui: &mut egui::Ui) {
+        self.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(self.r,self.g,self.b)),Default::default()));
     }
 
     pub fn _avarage(&mut self,comp: &AvarageRgb){

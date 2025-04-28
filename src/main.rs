@@ -436,7 +436,7 @@ impl ImageWindow {
 
         let median_color:Rgb<u8> = Rgb::from([r,g,b]);
         let mut avarage_median = iris_color::AvarageRgb::from_rgb(median_color);
-        avarage_median.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(avarage_median.r, avarage_median.g, avarage_median.b)),Default::default()));
+        avarage_median.generate_texture(ui);
 
         self.color_list.insert(0,avarage_median);
         self.color_percent.insert(0,1.0);
@@ -519,10 +519,10 @@ impl ImageWindow {
                     break;
                 }
                 let mut ac_buffer = iris_color::AvarageRgb::from_rgb(Rgb::from(c));
-                ac_buffer.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(ac_buffer.r, ac_buffer.g, ac_buffer.b)),Default::default()));
+                ac_buffer.generate_texture(ui);
                 avarage_median.colors.push(ac_buffer);
             }
-            avarage_median.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(avarage_median.r, avarage_median.g, avarage_median.b)),Default::default()));
+            avarage_median.generate_texture(ui);
             let key = self.color_list.len() as u32;
             self.color_list.insert(key,avarage_median);
             self.color_percent.insert(key,median_cut.colors.len() as f32/all_color_size as f32);
@@ -641,9 +641,9 @@ impl ImageWindow {
         }
 
         for (_id,c) in self.color_list.iter_mut(){
-            c.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(c.r, c.g, c.b)),Default::default()));
+            c.generate_texture(ui);
             for sub_c in c.colors.iter_mut() {
-                sub_c.texture =Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(sub_c.r, sub_c.g, sub_c.b)),Default::default())); 
+                sub_c.generate_texture(ui);
             }
         }
         self.clean_up();
@@ -786,7 +786,7 @@ impl eframe::App for MyEguiApp {
                     let g = (self.color_to_add[1] * 255.0).min(255.0) as u8; 
                     let b = (self.color_to_add[2] * 255.0).min(255.0) as u8; 
                     let mut color = iris_color::AvarageRgb::from_rgb(Rgb::from([r,g,b]));
-                    color.texture = Some(ui.ctx().load_texture("color_text",ColorImage::new([32,32],Color32::from_rgb(r,g,b)),Default::default()));
+                    color.generate_texture(ui);
 
                     self.global_colors.push(color);
                 };
