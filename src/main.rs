@@ -4,8 +4,9 @@ use std::fmt::Debug;
 use std::{collections::HashMap,path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
-use egui::{widgets, Color32, ColorImage, DroppedFile, Vec2};
+use egui::{ColorImage, DroppedFile, Vec2};
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
+use iris_color::OkLab;
 use itertools::Itertools;
 
 mod iris_color;
@@ -21,6 +22,7 @@ struct ImageWindow {
     main_img_size:[u32;2],
     name:String,
     open:bool,
+
     color_list:HashMap<u32,iris_color::AvarageRgb>,
     color_percent:HashMap<u32,f32>,
     color_pixel_count:HashMap<u32,u32>,
@@ -36,11 +38,16 @@ struct ImageWindow {
     img_rect:Option<egui::TextureHandle>,
     img_bar:Option<egui::TextureHandle>,
     img_dispaly_generated:bool,
+
     reload_hsl_rect:bool,
     reload_hsl_bar:bool,
+
     clean_up_value:f32,
+
     mark_every_color:bool,
+
     median_cut_amount:u32,
+    mean_schift_radius:f32,
 
     avarage_saturation:f32,
     saturation_range:[f32;2],
@@ -60,6 +67,7 @@ enum AvarageingSystem {
     DeltaE,
     MedianColor,
     MedianCuttin,
+    MeanShift,
 }
 
 #[derive(Clone)]
@@ -122,6 +130,7 @@ impl ImageWindow {
                 clean_up_value,
                 mark_every_color:false,
                 median_cut_amount:0,
+                mean_schift_radius:0_f32,
                 main_img_size,
                 avarage_saturation,
                 saturation_range,
@@ -197,6 +206,7 @@ impl ImageWindow {
                         ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::MedianCuttin,"Median Cutting");
                         ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::DeltaE,"Delta E");
                         ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::MedianColor,"Median Color");
+                        ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::MeanShift,"Mean Shift");
                     });
                 ui.separator();
                 match self.avaraging_system {
@@ -215,7 +225,6 @@ impl ImageWindow {
                             iris_color::ColorSpace::CieLab => color_deg_max = 300.0,
                             iris_color::ColorSpace::OkLab => color_deg_max = 2.0,
                             iris_color::ColorSpace::Rgb => color_deg_max = 500.0,
-                            _=> color_deg_max = 0.0,
                         }
                         ui.add(egui::Slider::new(&mut self.color_gradation,0.0 ..= color_deg_max).text("Color Gradation"));
                         ui.add(egui::Slider::new(&mut self.clean_up_value,0.0 ..= 0.1).text("Clean up Threshold"))
@@ -238,6 +247,13 @@ impl ImageWindow {
                             self.get_img_data();
                         }
                     },
+                    AvarageingSystem::MeanShift => {
+                        ui.add(egui::Slider::new(&mut self.mean_schift_radius,0.0 ..= 100.0).text("Mean Shift Radius")).on_hover_text("OKLab range at which Colors get clustered Together");
+                        if ui.button("Scan").clicked(){
+                            self.scan_image_mean_shift(ui);
+                            self.get_img_data();
+                        }
+                    }
                 }
                 ui.separator();
                 egui::ComboBox::from_label("Sorted by")
@@ -256,7 +272,7 @@ impl ImageWindow {
                     CompareState::Percentages => {  // ----------PERCENTAGE GUI
                         let mut color_sorted:Vec<_> = self.color_list.iter_mut().collect();
                         color_sorted.sort_by(|a,b| {
-                            if self.color_percent[a.0] < self.color_percent[b.0] {
+                            if self.color_percent[&a.0] < self.color_percent[&b.0] {
                                 return Ordering::Greater;
                             }else{
                                 return Ordering::Less;
@@ -480,6 +496,17 @@ impl ImageWindow {
         [r,g,b]
     }
 
+    fn scan_image_mean_shift(&mut self, ui:&mut egui::Ui) {
+       let true_radius = self.mean_schift_radius/100.0; 
+
+        self.color_percent = HashMap::new();
+        self.color_list = HashMap::new();
+        self.color_pixel_count = HashMap::new();
+        let image = ImageReader::open(self.path.clone()).unwrap().decode().unwrap(); 
+        let _size = image.width() as f64 * image.height() as f64;
+
+    }
+
     fn scan_image_median_cutting(&mut self, ui:&mut egui::Ui){
         self.color_percent = HashMap::new();
         self.color_list = HashMap::new();
@@ -597,10 +624,11 @@ impl ImageWindow {
                                 let lab_b = iris_color::CieLab::from_rgb(rgb);
                                 lab_a.distance_to_lab(&lab_b)
                             },
-                            iris_color::ColorSpace::XYZ => dist = 0.0,
                             iris_color::ColorSpace::OkLab => dist = {
                                 let lab_a = iris_color::OkLab::from_rgb(&value.to_rgb());
                                 let lab_b = iris_color::OkLab::from_rgb(&rgb);
+                                // max_dist = max_dist.max(lab_a.b);
+                                // min_dist = min_dist.min(lab_a.b);
                                 lab_a.distance_to_lab(&lab_b)
                             },
                         }
@@ -622,7 +650,7 @@ impl ImageWindow {
                 }else if let Some(cck) = closest_color_key{
                     if let Some(value) = self.color_list.get_mut(&cck){
                         if self.color_gradation > 0.0 {
-                            value.avarage_with_rgb(&rgb,self.color_gradation);
+                            value.avarage_with_rgb(&rgb);
                         }
                         if let Some(percent) = self.color_percent.get_mut(&cck){
                             *percent += (1.0/size) as f32;
@@ -636,6 +664,7 @@ impl ImageWindow {
                 transparent_pixels += 1.0;
             }
         }
+        // println!("{} >> {}",max_dist,min_dist);
         for (_,p) in self.color_percent.iter_mut(){
             *p = ((*p as f64 *size)/(size-transparent_pixels)) as f32;
         }
@@ -865,7 +894,7 @@ impl eframe::App for MyEguiApp {
 struct ColorCompareWindow {
     img:iris_image_creation::PieColorComp,
     texture:Option<egui::TextureHandle>,
-    colors:Vec<iris_color::AvarageRgb>,
+    _colors:Vec<iris_color::AvarageRgb>,
     id:usize,
     window_open:bool,
 }
@@ -880,7 +909,7 @@ impl ColorCompareWindow {
             Self{
                 img,
                 texture,
-                colors,
+                _colors:colors,
                 id,
                 window_open:true,
             }

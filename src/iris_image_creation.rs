@@ -1,7 +1,5 @@
 use std::f32::consts::PI;
-
-use eframe::glow::ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH;
-use image::{Pixel, Rgb, RgbImage};
+use image::{ Rgb, RgbImage};
 
 use crate::iris_color::AvarageRgb;
 
@@ -50,7 +48,7 @@ impl ImageCreator {
 pub struct RGBRect;
 
 impl RGBRect {
-    
+    #[allow(dead_code)]
     pub fn rgb_rect_x(x:f32) -> [f32;3] {
         let r = (-9.0*x.powf(2.0) + 3.0*x + 0.75).max(0.0);
         let g = (-9.0*x.powf(2.0) + 9.0*x - 1.25).max(0.0);
@@ -61,6 +59,7 @@ impl RGBRect {
 
         [r + r_2,g,b + b_2]
     }
+    #[allow(dead_code)]
     pub fn generate_image() {
         let mut img = RgbImage::new(64,64);
         for x in 0..64 {
@@ -125,9 +124,11 @@ impl HSLRect {
             m.draw_rect(self);
         }
     }
+    #[allow(dead_code)]
     pub fn save_rect(&self){ 
         let _ = self.img_rect.save("./created_images/HSL_saturation_lightness_rect.png");
     }
+    #[allow(dead_code)]
     pub fn save_bar(&self){ 
         let _ = self.img_bar.save("./created_images/HSL_hue_rect.png");
     }
@@ -163,6 +164,7 @@ impl HSLRect {
             return false;
         }
     }
+    #[allow(dead_code)]
     pub fn remove_marker(&mut self,new_color:&mut AvarageRgb) -> bool {
         let rgb = new_color.to_rgb();
         let index = self.obj.iter().position(|r| r.rgb == rgb); 
