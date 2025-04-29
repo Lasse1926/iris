@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::{collections::HashMap,path::PathBuf};
 use std::cell::Cell;
 use eframe::egui;
@@ -496,6 +497,7 @@ impl ImageWindow {
         [r,g,b]
     }
 
+
     fn scan_image_mean_shift(&mut self, ui:&mut egui::Ui) {
        let true_radius = self.mean_schift_radius/100.0; 
 
@@ -505,6 +507,63 @@ impl ImageWindow {
         let image = ImageReader::open(self.path.clone()).unwrap().decode().unwrap(); 
         let _size = image.width() as f64 * image.height() as f64;
 
+        let mut color_rgb_values:HashSet<[u8;3]>= HashSet::new();
+
+        let mut end_points:HashSet<MeanShiftCursor> = HashSet::new();
+
+        for (_x,_y,rgba) in image.pixels(){
+            if !(rgba.channels()[3]<= 0){
+                let rgb = rgba.to_rgb();
+                if !color_rgb_values.contains(&rgb.0) {
+                    color_rgb_values.insert(rgb.0); 
+                }
+            }
+        }
+        for c in color_rgb_values.iter() {
+            // Rgb Value of Lab Position of ?Target/cursor
+            let mut current_pos = MeanShiftCursor::new(*c,true_radius);
+    
+            let mut looping = true;
+            while looping{
+                let mut added_new_color = false;
+                //current cursor pos as lab 
+                for secondary_color in color_rgb_values.iter() {
+                    if current_pos.inside_radius(*secondary_color){
+                        let added_color = current_pos.add_color(*secondary_color);
+                        if added_new_color == false {
+                            added_new_color = added_color;
+                        }
+                    }
+                }
+                if added_new_color {
+                    current_pos.move_to_color_avarage();
+                }else{
+                    let mut contains = false;
+                    for c in end_points.iter() {
+                        if c.is_same_as(&current_pos) {
+                            contains = true;
+                        }
+                    }
+                    if !contains {
+                        end_points.insert(current_pos.clone());
+                    }
+                    looping = false;
+                }
+            }
+            
+        }
+        for cursor in end_points {
+            let mut av_color = iris_color::AvarageRgb::from_rgb(Rgb::from(cursor.rgb_color));
+            av_color.generate_texture(ui);
+            for c in cursor.colors{
+                let mut sub_av_color = iris_color::AvarageRgb::from_rgb(Rgb::from(c));
+                sub_av_color.generate_texture(ui);
+                av_color.colors.push(sub_av_color);
+            }
+            let id = self.color_list.len() as u32;
+            self.color_list.insert(id, av_color);
+            self.color_percent.insert(id,1.0);
+        }
     }
 
     fn scan_image_median_cutting(&mut self, ui:&mut egui::Ui){
@@ -890,11 +949,72 @@ impl eframe::App for MyEguiApp {
         }
     }
 }
+#[derive(Clone)]
+struct MeanShiftCursor{
+    pub leeway:f32,
+    lab_pos:iris_color::OkLab,
+    rgb_color:[u8;3],
+    colors:HashSet<[u8;3]>,
+    radius:f32,
+}
+impl MeanShiftCursor {
+    pub fn new(color:[u8;3],radius:f32) -> Self{
+        let lab_pos = iris_color::OkLab::from_rgb(&Rgb::from(color));
+        MeanShiftCursor{
+            leeway:0.2,
+            lab_pos,
+            rgb_color:color,
+            colors:HashSet::new(),
+            radius,
+            
+        }
+    } 
+    pub fn update_rgb_color(&mut self){
+        self.rgb_color = self.lab_pos.to_rgb();
+    }
+    pub fn move_to_color_avarage(&mut self){
+        for c in self.colors.iter(){
+            let lab_b = iris_color::OkLab::from_rgb(&Rgb::from(*c));
+            self.lab_pos.add(&lab_b);
+        } 
+        self.lab_pos.diff(self.colors.len() as f32);
+        self.update_rgb_color();
+    }
+    pub fn add_color(&mut self,color:[u8;3]) -> bool{
+        if self.colors.contains(&color){
+            return false;
+        }
+        self.colors.insert(color);
+        true
+    }
+    pub fn inside_radius(&self,color:[u8;3]) -> bool {
+        let lab_b = iris_color::OkLab::from_rgb(&Rgb::from(color));
+        self.lab_pos.distance_to_lab(&lab_b) <= self.radius
+    }
+    pub fn is_same_as(&self,other:&Self) -> bool {
+        self.lab_pos.distance_to_lab(&other.lab_pos) <= (self.leeway + other.leeway)/2.0
+    }
+
+}
+impl Hash for MeanShiftCursor {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.rgb_color.hash(state);
+    } 
+}
+
+impl PartialEq for MeanShiftCursor {
+   fn eq(&self, other: &Self) -> bool {
+        self.lab_pos.distance_to_lab(&other.lab_pos) <= (self.leeway + other.leeway)/2.0
+   } 
+}
+impl Eq for MeanShiftCursor {
+    
+}
 
 struct ColorCompareWindow {
     img:iris_image_creation::PieColorComp,
     texture:Option<egui::TextureHandle>,
-    _colors:Vec<iris_color::AvarageRgb>,
+    colors:Vec<iris_color::AvarageRgb>,
     id:usize,
     window_open:bool,
 }
@@ -909,7 +1029,7 @@ impl ColorCompareWindow {
             Self{
                 img,
                 texture,
-                _colors:colors,
+                colors,
                 id,
                 window_open:true,
             }
@@ -927,6 +1047,12 @@ impl ColorCompareWindow {
                     ui.add(
                         egui::Image::from_texture(texture)
                     );
+                }
+                for combi in self.colors.iter().combinations(2) {
+                    let lab_a = iris_color::OkLab::from_rgb(&Rgb::from(combi[0].to_rgb()));
+                    let lab_b = iris_color::OkLab::from_rgb(&Rgb::from(combi[1].to_rgb()));
+
+                    ui.label(format!("{} |-- {} --| {}",combi[0],lab_a.distance_to_lab(&lab_b),combi[1]));
                 }
             });
             self.window_open = window_open_buffer;
