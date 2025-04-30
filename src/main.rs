@@ -1016,22 +1016,62 @@ struct ColorCompareWindow {
     texture:Option<egui::TextureHandle>,
     colors:Vec<iris_color::AvarageRgb>,
     id:usize,
+    max_range:Option<f32>,
+    max_range_items:Option<[iris_color::AvarageRgb;2]>,
+    median_range:Option<f32>,
+    median_range_items:Option<[iris_color::AvarageRgb;2]>,
+    min_range:Option<f32>,
+    min_range_items:Option<[iris_color::AvarageRgb;2]>,
     window_open:bool,
 }
 
 impl ColorCompareWindow {
     fn new(colors:Vec<iris_color::AvarageRgb>) -> Self {
         WINDOW_ID.with(|thread_id|{
-            let img = iris_image_creation::PieColorComp::new(colors.clone(),128);
+            let img = iris_image_creation::PieColorComp::new(colors.clone(),256);
             let texture:Option<egui::TextureHandle> = None;
             let id = thread_id.get();
             thread_id.set(id+1);
+            let mut max_range:Option<f32> = Some(0_f32);
+            let mut max_range_items:Option<[iris_color::AvarageRgb;2]> = None;
+            let mut min_range:Option<f32> = Some(f32::MAX);
+            let mut min_range_items:Option<[iris_color::AvarageRgb;2]> = None;
+            let mut all_range:Vec<(f32,[iris_color::AvarageRgb;2])> = vec![];
+            for combi in colors.iter().combinations(2) {
+                let lab_a = iris_color::OkLab::from_rgb(&Rgb::from(combi[0].to_rgb()));
+                let lab_b = iris_color::OkLab::from_rgb(&Rgb::from(combi[1].to_rgb()));
+                let range = lab_a.distance_to_lab(&lab_b);
+                if range > max_range.unwrap() {
+                    max_range = Some(range);
+                    max_range_items = Some([combi[0].clone(),combi[1].clone()]);
+                }
+                if range <= min_range.unwrap() {
+                    min_range = Some(range);
+                    min_range_items = Some([combi[0].clone(),combi[1].clone()]);
+                }
+                all_range.push((range,[combi[0].clone(),combi[1].clone()]));
+            }
+            all_range.sort_by(|a,b| a.0.partial_cmp(&b.0).unwrap());
+            let mut median_range_items:Option<[iris_color::AvarageRgb; 2]> = None;
+            let mut median_range:Option<f32> = None;
+
+            if all_range.len() >= 3 {
+                let median_index = all_range.len()/2;
+                median_range_items = Some(all_range[median_index].1.clone());
+                median_range = Some(all_range[median_index].0);
+            }
             Self{
                 img,
                 texture,
                 colors,
                 id,
                 window_open:true,
+                max_range,
+                max_range_items,
+                min_range,
+                min_range_items,
+                median_range,
+                median_range_items,
             }
         })
     } 
@@ -1048,11 +1088,14 @@ impl ColorCompareWindow {
                         egui::Image::from_texture(texture)
                     );
                 }
-                for combi in self.colors.iter().combinations(2) {
-                    let lab_a = iris_color::OkLab::from_rgb(&Rgb::from(combi[0].to_rgb()));
-                    let lab_b = iris_color::OkLab::from_rgb(&Rgb::from(combi[1].to_rgb()));
-
-                    ui.label(format!("{} |-- {} --| {}",combi[0],lab_a.distance_to_lab(&lab_b),combi[1]));
+                if let Some(max_range_items) = &self.max_range_items{
+                    ui.label(format!("Max Range:\n {} |-- {} --| {}",max_range_items[0],self.max_range.unwrap(),max_range_items[1]));
+                }
+                if let Some(median_range_items) = &self.median_range_items{
+                    ui.label(format!("median Range:\n {} |-- {} --| {}",median_range_items[0],self.median_range.unwrap(),median_range_items[1]));
+                }
+                if let Some(min_range_items) = &self.min_range_items{
+                    ui.label(format!("Min Range:\n {} |-- {} --| {}",min_range_items[0],self.min_range.unwrap(),min_range_items[1]));
                 }
             });
             self.window_open = window_open_buffer;
