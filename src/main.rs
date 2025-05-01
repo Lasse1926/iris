@@ -269,6 +269,9 @@ impl ImageWindow {
                        c.marked = self.mark_every_color; 
                     }
                 };
+                if ui.button("Switch to Most Saturated color").clicked() {
+                    self.switch_colors_to_saturarion(ui);
+                }
                 match self.compare_state {
                     CompareState::Percentages => {  // ----------PERCENTAGE GUI
                         let mut color_sorted:Vec<_> = self.color_list.iter_mut().collect();
@@ -405,6 +408,11 @@ impl ImageWindow {
             self.open = window_open;
         }
     }    
+    fn switch_colors_to_saturarion(&mut self,ui:&mut egui::Ui){
+        for (_,c) in self.color_list.iter_mut(){
+           c.switch_to_most_saturated_color(ui); 
+        }
+    }
     fn scan_image_median_color(&mut self,ui:&mut egui::Ui){
 
         self.color_percent = HashMap::new();

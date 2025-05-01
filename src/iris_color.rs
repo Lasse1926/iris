@@ -179,6 +179,30 @@ impl AvarageRgb {
             }
         })
     }
+    pub fn switch_to_most_saturated_color(&mut self,ui: &mut egui::Ui){
+        let mut old_main = Self::from_rgb(Rgb::from([self.r,self.g,self.b])); 
+        old_main.generate_texture(ui);
+        self.colors.push(old_main);  
+        self.colors.sort_by(|a,b|{
+            let hsl_a = HSL::from_rgb(&a.to_rgb());
+            let hsl_b = HSL::from_rgb(&b.to_rgb());
+
+            if hsl_a.s == hsl_b.s {
+                (0.5 - hsl_b.l).abs().partial_cmp(&(0.5 - hsl_a.l).abs()).unwrap()
+            }else{
+                hsl_a.s.partial_cmp(&hsl_b.s).unwrap()
+            }
+        });
+        let new_main = self.colors.pop().unwrap();
+        self.colors.append(&mut new_main.colors.clone());
+        self.color_n = self.colors.len() as u32;
+        self.r = new_main.r;
+        self.g = new_main.g;
+        self.b = new_main.b;
+        self.generate_texture(ui);
+        self.generate_color_display();
+
+    }
     pub fn generate_color_display(&mut self) {
         let rgb = Rgb::from([self.r,self.g,self.b]);
         let marker = iic::RGBMarker::new(rgb,5,2);
