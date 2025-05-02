@@ -7,7 +7,6 @@ use std::cell::Cell;
 use eframe::egui;
 use egui::{ColorImage, DroppedFile, Vec2};
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
-use iris_color::OkLab;
 use itertools::Itertools;
 
 mod iris_color;
@@ -141,6 +140,37 @@ impl ImageWindow {
 
         })
     }
+    fn remove_selected_color(&mut self){
+        let mut id_to_remove:Vec<u32> = vec![];
+        for (id,color) in self.color_list.iter(){
+            if color.marked {
+                id_to_remove.push(*id);
+            }
+        }
+        for id in id_to_remove {
+            if self.color_list.contains_key(&id){
+                self.color_list.remove(&id);
+            }
+            if self.color_percent.contains_key(&id){
+                self.color_percent.remove(&id);
+            }
+            if self.color_pixel_count.contains_key(&id){
+                self.color_pixel_count.remove(&id);
+            }
+        }
+        self.recalculate_color_precentage();
+    }
+    fn recalculate_color_precentage(&mut self){
+        let mut pixel_count = 0;
+        for (_,count) in self.color_pixel_count.iter(){
+            pixel_count += count; 
+        }
+        for (id,percent) in self.color_percent.iter_mut(){
+            if let Some(count) = self.color_pixel_count.get(id) {
+                *percent = *count as f32/pixel_count as f32;
+            }
+        }
+    }
     fn generate_color_display(&mut self) {
         if self.color_list.len() <= 0 {
             return;
@@ -264,11 +294,16 @@ impl ImageWindow {
                         ui.selectable_value(&mut self.compare_state,CompareState::Saturation , "Saturation");
                     }
                 );
-                if ui.checkbox(&mut self.mark_every_color,"Select every color").clicked(){
-                    for (_id,c) in &mut self.color_list{
-                       c.marked = self.mark_every_color; 
-                    }
-                };
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
+                    if ui.checkbox(&mut self.mark_every_color,"Select every color").clicked(){
+                        for (_id,c) in &mut self.color_list{
+                           c.marked = self.mark_every_color; 
+                        }
+                    };
+                    if ui.button("Remove selected Colors").clicked(){
+                        self.remove_selected_color();
+                    };
+                });
                 if ui.button("Switch to Most Saturated color").clicked() {
                     self.switch_colors_to_saturarion(ui);
                 }
@@ -862,6 +897,18 @@ impl MyEguiApp {
         }
         color_to_return
     }
+    fn remove_selected_colors(&mut self){
+        let mut id_to_remove:Vec<usize> = vec![];
+        for (id,c) in self.global_colors.iter().enumerate() {
+            if c.marked {
+                id_to_remove.push(id);
+            } 
+        }
+        id_to_remove.reverse();
+        for id in id_to_remove {
+            self.global_colors.remove(id);
+        }
+    }
 }
 
 impl eframe::App for MyEguiApp {
@@ -872,9 +919,14 @@ impl eframe::App for MyEguiApp {
             }
         });
         egui::SidePanel::left("ColorPanle").show(ctx,|ui| {
-            if ui.button("Get Colors").on_hover_text("Copies every selected Color into Your Color Palet").clicked(){
-                self.get_global_selected_colors();
-            }
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
+                if ui.button("Get Colors").on_hover_text("Copies every selected Color into Your Color Palet").clicked(){
+                    self.get_global_selected_colors();
+                }
+                if ui.button("Remove Selected Colors").clicked() {
+                    self.remove_selected_colors();
+                }
+            });
             ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui| {
                 ui.color_edit_button_rgb(&mut self.color_to_add);
                 if ui.button("+").on_hover_text("Add displayed Color to your color palette").clicked(){
