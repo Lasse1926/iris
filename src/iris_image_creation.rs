@@ -1,5 +1,8 @@
-use std::f32::consts::PI;
-use image::{ Rgb, RgbImage};
+use std::fmt::Display;
+use std::{f32::consts::PI,path::PathBuf};
+use egui::ColorImage;
+use image::{DynamicImage, GenericImageView, Pixel, RgbaImage};
+use image::{ Rgb, RgbImage,ImageReader};
 
 use crate::iris_color::AvarageRgb;
 
@@ -300,4 +303,67 @@ impl PieColorComp {
         let _ = self.img.save("./created_images/pie_color_comp.png");
     }
     
+}
+#[derive(Default,PartialEq)]
+pub enum DisplayOption {
+    GrayScale(Option<egui::TextureHandle>), 
+    #[default]
+    Default,
+}
+
+impl Display for DisplayOption{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::Default => write!(f,"default"),
+            Self::GrayScale(..) => write!(f,"gray_scale"),
+        }
+    }
+}
+    
+pub struct ImageEditor {
+    pub img:RgbaImage,
+    pub img_width:u32,
+    pub img_hight:u32,
+    pub original_img_path:PathBuf,
+    pub display_selection:DisplayOption,
+    pub image_reader:DynamicImage,
+}
+impl ImageEditor {
+    pub fn new(path:PathBuf) -> Self{
+        let image_reader = ImageReader::open(path.clone()).unwrap().decode().unwrap(); 
+        let img_hight = image_reader.height();
+        let img_width = image_reader.width();
+        let img = RgbaImage::new(image_reader.width(),image_reader.height());
+        let original_img_path = path;
+        let display_selection = DisplayOption::Default;
+        Self{
+            image_reader,
+            img,
+            img_width,
+            img_hight,
+            original_img_path,
+            display_selection,
+        }
+    } 
+
+    pub fn generate_gray_scale_img(&mut self,ui:&mut egui::Ui){
+        // self.img = self.image_reader.grayscale().into_rgb8();
+        for x in 0..self.img_width {
+            for  y in 0..self.img_hight{
+                let mut pixel = self.image_reader.get_pixel(x, y);
+                let mut gray_scale_rgb = iris_color::HSL::from_rgb(&pixel.to_rgb());
+                gray_scale_rgb.s = 0.0;
+                pixel.0[0] = gray_scale_rgb.to_rgb().0[0]; 
+                pixel.0[1] = gray_scale_rgb.to_rgb().0[1]; 
+                pixel.0[2] = gray_scale_rgb.to_rgb().0[2]; 
+                self.img.put_pixel(x, y, pixel);
+            }
+        }
+        self.display_selection = DisplayOption::GrayScale(Some(ui.ctx().load_texture("color_text",ColorImage::from_rgba_premultiplied([self.img_width as usize,self.img_hight as usize],&self.img),egui::TextureOptions::NEAREST)));
+    }
+
+    pub fn save_img(&self){
+        let file_name = self.original_img_path.file_name().unwrap().to_str();
+        let _ = self.img.save(format!( "./created_images/{}_{}.png",file_name.unwrap_or("unnamed"),self.display_selection));
+    }
 }

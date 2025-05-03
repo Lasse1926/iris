@@ -19,6 +19,7 @@ fn main() {
 struct ImageWindow {
     id:usize,
     path:PathBuf,
+    img_editor:iris_image_creation::ImageEditor,
     main_img_size:[u32;2],
     name:String,
     open:bool,
@@ -108,8 +109,10 @@ impl ImageWindow {
             let lightness_range = [0.0,0.0];
 
             let main_img_size = [image.width(),image.height()];
+            let img_editor = iris_image_creation::ImageEditor::new(path.clone());
             ImageWindow{
                 path,
+                img_editor,
                 name,
                 open,
                 color_percent,
@@ -228,9 +231,29 @@ impl ImageWindow {
             egui::Window::new(self.name.clone()).id(egui::Id::new(self.id)).open(&mut window_open).show(ctx, |ui| {
 
                 let string_path = "file://".to_owned() + self.path.to_str().unwrap();
-                ui.add(
-                    egui::Image::new(string_path).shrink_to_fit()
-                ); 
+                match &mut self.img_editor.display_selection {
+                    iris_image_creation::DisplayOption::Default => {
+                        if self.main_img_size[0].max(self.main_img_size[1]) <= 128 {
+                            ui.add(
+                                egui::Image::new(string_path).texture_options(egui::TextureOptions::NEAREST ).shrink_to_fit()
+                            ); 
+                        }else{
+                            ui.add(
+                                egui::Image::new(string_path).shrink_to_fit()
+                            ); 
+                        }
+                    }
+                    iris_image_creation::DisplayOption::GrayScale(texture) => {
+                        if let Some(t) = texture {
+                            ui.add(
+                                egui::Image::from_texture(&*t).shrink_to_fit()
+                            );
+                        }
+                    }
+                }
+                if ui.button("Generate_Gray_scale").clicked(){
+                    self.img_editor.generate_gray_scale_img(ui);
+                } 
                 egui::ComboBox::from_label("Select Avaraging Technique")
                     .selected_text(format!("{:?}",self.avaraging_system))
                     .show_ui(ui,|ui|{
