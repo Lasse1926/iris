@@ -8,6 +8,7 @@ use eframe::egui;
 use egui::{ColorImage, DroppedFile, Vec2};
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
 use itertools::Itertools;
+use nalgebra::wrap;
 
 mod iris_color;
 mod iris_image_creation;
@@ -74,7 +75,8 @@ enum AvarageingSystem {
 #[derive(Clone)]
 struct MedianCut {
     median_color:[u8;3],
-    colors:Vec<[u8;3]>,
+    colors:Vec<([u8;3],[u32;2])>,
+    position:[u32;2],
 }
 thread_local!(static WINDOW_ID: Cell<usize> = Cell::new(0));
 
@@ -203,7 +205,7 @@ impl ImageWindow {
             img.obj.clear();
             for (id,c) in color_sorted{
                 if self.color_percent[id] >= self.color_display_threshhold {
-                    img.add_marker(c,5,2);
+                    img.add_marker(c,10,2);
                 }
             }
             img.generate_h_bar();
@@ -260,7 +262,7 @@ impl ImageWindow {
                         ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::MedianCuttin,"Median Cutting");
                         ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::DeltaE,"Delta E");
                         ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::MedianColor,"Median Color");
-                        ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::MeanShift,"Mean Shift");
+                        // ui.selectable_value(&mut self.avaraging_system,AvarageingSystem::MeanShift,"Mean Shift");
                     });
                 ui.separator();
                 match self.avaraging_system {
@@ -476,49 +478,70 @@ impl ImageWindow {
         self.color_percent = HashMap::new();
         self.color_list = HashMap::new();
 
-        let mut color_vec:Vec<Rgb<u8>> = vec![];
+        let mut color_vec:Vec<(Rgb<u8>,[u32;2])> = vec![];
 
         let image = ImageReader::open(self.path.clone()).unwrap().decode().unwrap(); 
         let size = image.width() as f64 * image.height() as f64;
 
-        for (_x,_y,rgba) in image.pixels(){
+        for (x,y,rgba) in image.pixels(){
             if !(rgba.channels()[3]<= 0){
                 let rgb = rgba.to_rgb();
-                color_vec.push(rgb);
+                color_vec.push((rgb,[x,y]));
             }
         }
          
-        color_vec.sort_by(|a,b| a.0[0].partial_cmp(&b.0[0]).unwrap());
+        color_vec.sort_by(|a,b| a.0.0[0].partial_cmp(&b.0.0[0]).unwrap());
         let r:u8; 
+        let r_pos:[u32;2];
         if color_vec.len() % 2 == 0 {
-            let upper = color_vec[color_vec.len()/2].0[0];
-            let lower = color_vec[(color_vec.len()/2)-1].0[0];
+            let upper = color_vec[color_vec.len()/2].0.0[0];
+            let lower = color_vec[(color_vec.len()/2)-1].0.0[0];
+
+            let upper_pos = color_vec[color_vec.len()/2].1;
+            let lower_pos = color_vec[color_vec.len()/2-1].1;
 
             r = ((upper as u32 + lower as u32)/2).min(255) as u8;
+            r_pos = [(upper_pos[0] + lower_pos[0])/2,(upper_pos[1] + lower_pos[1])/2];
         }else{
-            r = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].0[0];
+            r = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].0.0[0];
+            r_pos = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].1;
         }
+        color_vec.sort_by(|a,b| a.0.0[1].partial_cmp(&b.0.0[1]).unwrap());
         let g:u8; 
+        let g_pos:[u32;2];
         if color_vec.len() % 2 == 0 {
-            let upper = color_vec[color_vec.len()/2].0[1];
-            let lower = color_vec[(color_vec.len()/2)-1].0[1];
+            let upper = color_vec[color_vec.len()/2].0.0[1];
+            let lower = color_vec[(color_vec.len()/2)-1].0.0[1];
+
+            let upper_pos = color_vec[color_vec.len()/2].1;
+            let lower_pos = color_vec[color_vec.len()/2-1].1;
 
             g = ((upper as u32 + lower as u32)/2).min(255) as u8;
+            g_pos = [(upper_pos[0] + lower_pos[0])/2,(upper_pos[1] + lower_pos[1])/2];
         }else{
-            g = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].0[1];
+            g = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].0.0[1];
+            g_pos = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].1;
         }
+        color_vec.sort_by(|a,b| a.0.0[2].partial_cmp(&b.0.0[2]).unwrap());
         let b:u8; 
+        let b_pos:[u32;2];
         if color_vec.len() % 2 == 0 {
-            let upper = color_vec[color_vec.len()/2].0[2];
-            let lower = color_vec[(color_vec.len()/2)-1].0[2];
+            let upper = color_vec[color_vec.len()/2].0.0[2];
+            let lower = color_vec[(color_vec.len()/2)-1].0.0[2];
+
+            let upper_pos = color_vec[color_vec.len()/2].1;
+            let lower_pos = color_vec[color_vec.len()/2-1].1;
 
             b = ((upper as u32 + lower as u32)/2).min(255) as u8;
+            b_pos = [(upper_pos[0] + lower_pos[0])/2,(upper_pos[1] + lower_pos[1])/2];
         }else{
-            b = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].0[2];
+            b = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].0.0[2];
+            b_pos = color_vec[(color_vec.len() as f32/2.0).ceil() as usize].1;
         }
 
         let median_color:Rgb<u8> = Rgb::from([r,g,b]);
-        let mut avarage_median = iris_color::AvarageRgb::from_rgb(median_color);
+        let median_pos:[u32;2] = [(r_pos[0]+g_pos[0]+b_pos[0])/3,(r_pos[0]+g_pos[0]+b_pos[0])/3];
+        let mut avarage_median = iris_color::AvarageRgb::from_rgb(median_color,median_pos);
         avarage_median.generate_texture(ui);
 
         self.color_list.insert(0,avarage_median);
@@ -527,40 +550,62 @@ impl ImageWindow {
 
 
     }
-    fn get_median_color(&self,colors:&mut Vec<[u8;3]>) -> [u8;3] {
-        colors.sort_by(|a,b| a[0].partial_cmp(&b[0]).unwrap());
+    fn get_median_color(&self,colors:&mut Vec<([u8;3],[u32;2])>) -> ([u8;3],[u32;2]) {
+        colors.sort_by(|a,b| a.0[0].partial_cmp(&b.0[0]).unwrap());
         let r:u8; 
+        let r_pos:[u32;2];
         if colors.len() == 1 {
             return colors[0];
         }
         if colors.len() % 2 == 0 {
-            let upper = colors[colors.len()/2][0];
-            let lower = colors[(colors.len()/2)-1][0];
+            let upper = colors[colors.len()/2].0[0];
+            let lower = colors[(colors.len()/2)-1].0[0];
+
+            let upper_pos = colors[colors.len()/2].1;
+            let lower_pos = colors[colors.len()/2-1].1;
 
             r = ((upper as u32 + lower as u32)/2).min(255) as u8;
+            r_pos = [(upper_pos[0] + lower_pos[0])/2,(upper_pos[1] + lower_pos[1])/2];
         }else{
-            r = colors[(colors.len() as f32/2.0).ceil() as usize][0];
+            r = colors[(colors.len() as f32/2.0).ceil() as usize].0[0];
+            r_pos = colors[(colors.len() as f32/2.0).ceil() as usize].1;
         }
+        colors.sort_by(|a,b| a.0[1].partial_cmp(&b.0[1]).unwrap());
         let g:u8; 
+        let g_pos:[u32;2];
         if colors.len() % 2 == 0 {
-            let upper = colors[colors.len()/2][1];
-            let lower = colors[(colors.len()/2)-1][1];
+            let upper = colors[colors.len()/2].0[1];
+            let lower = colors[(colors.len()/2)-1].0[1];
+
+            let upper_pos = colors[colors.len()/2].1;
+            let lower_pos = colors[colors.len()/2-1].1;
 
             g = ((upper as u32 + lower as u32)/2).min(255) as u8;
+            g_pos = [(upper_pos[0] + lower_pos[0])/2,(upper_pos[1] + lower_pos[1])/2];
         }else{
-            g = colors[(colors.len() as f32/2.0).ceil() as usize][1];
+            g = colors[(colors.len() as f32/2.0).ceil() as usize].0[1];
+            g_pos = colors[(colors.len() as f32/2.0).ceil() as usize].1;
         }
+        colors.sort_by(|a,b| a.0[2].partial_cmp(&b.0[2]).unwrap());
         let b:u8; 
+        let b_pos:[u32;2];
         if colors.len() % 2 == 0 {
-            let upper = colors[colors.len()/2][2];
-            let lower = colors[(colors.len()/2)-1][2];
+            let upper = colors[colors.len()/2].0[2];
+            let lower = colors[(colors.len()/2)-1].0[2];
+
+            let upper_pos = colors[colors.len()/2].1;
+            let lower_pos = colors[colors.len()/2-1].1;
 
             b = ((upper as u32 + lower as u32)/2).min(255) as u8;
+            b_pos = [(upper_pos[0] + lower_pos[0])/2,(upper_pos[1] + lower_pos[1])/2];
         }else{
-            b = colors[(colors.len() as f32/2.0).ceil() as usize][2];
+            b = colors[(colors.len() as f32/2.0).ceil() as usize].0[2];
+            b_pos = colors[(colors.len() as f32/2.0).ceil() as usize].1;
         }
 
-        [r,g,b]
+        let median_pos:[u32;2] = [(r_pos[0]+g_pos[0]+b_pos[0])/3,(r_pos[0]+g_pos[0]+b_pos[0])/3];
+
+        ([r,g,b],median_pos)
     }
 
 
@@ -619,10 +664,10 @@ impl ImageWindow {
             
         }
         for cursor in end_points {
-            let mut av_color = iris_color::AvarageRgb::from_rgb(Rgb::from(cursor.rgb_color));
+            let mut av_color = iris_color::AvarageRgb::from_rgb(Rgb::from(cursor.rgb_color),[0,0]);
             av_color.generate_texture(ui);
             for c in cursor.colors{
-                let mut sub_av_color = iris_color::AvarageRgb::from_rgb(Rgb::from(c));
+                let mut sub_av_color = iris_color::AvarageRgb::from_rgb(Rgb::from(c),[0,0]);
                 sub_av_color.generate_texture(ui);
                 av_color.colors.push(sub_av_color);
             }
@@ -639,22 +684,21 @@ impl ImageWindow {
         let image = ImageReader::open(self.path.clone()).unwrap().decode().unwrap(); 
         let _size = image.width() as f64 * image.height() as f64;
 
-        let mut color_rgb_values:HashSet<[u8;3]>= HashSet::new();
+        let mut color_rgb_values:HashMap<[u8;3],[u32;2]>= HashMap::new();
        
 
-        for (_x,_y,rgba) in image.pixels(){
+        for (x,y,rgba) in image.pixels(){
             if !(rgba.channels()[3]<= 0){
                 let rgb = rgba.to_rgb();
-
-
-                if !color_rgb_values.contains(&rgb.0) {
-                    color_rgb_values.insert(rgb.0); 
+                if !color_rgb_values.contains_key(&rgb.0) {
+                    color_rgb_values.insert(rgb.0,[x,y]); 
                 }
             }
         }
         let mut color_vec = color_rgb_values.into_iter().collect_vec();
         let all_color_size = color_vec.len();
-        let mut cuts:Vec<MedianCut> = vec![MedianCut{median_color:self.get_median_color(&mut color_vec),colors:color_vec}];
+        let result = self.get_median_color(&mut color_vec);
+        let mut cuts:Vec<MedianCut> = vec![MedianCut{median_color:result.0,colors:color_vec,position:result.1}];
         for _ in 0..self.median_cut_amount {
             let target = cuts.pop(); 
             if let Some(mut t) = target {
@@ -665,12 +709,12 @@ impl ImageWindow {
             cuts.sort_by(|a,b| a.colors.len().partial_cmp(&b.colors.len()).unwrap());
         }
         for median_cut in cuts {
-            let mut avarage_median = iris_color::AvarageRgb::from_rgb(Rgb::from(median_cut.median_color));
+            let mut avarage_median = iris_color::AvarageRgb::from_rgb(Rgb::from(median_cut.median_color),median_cut.position);
             for c in median_cut.colors.clone().into_iter() {
-                if c == median_cut.median_color {
+                if c.0 == median_cut.median_color {
                     break;
                 }
-                let mut ac_buffer = iris_color::AvarageRgb::from_rgb(Rgb::from(c));
+                let mut ac_buffer = iris_color::AvarageRgb::from_rgb(Rgb::from(c.0),c.1);
                 ac_buffer.generate_texture(ui);
                 avarage_median.colors.push(ac_buffer);
             }
@@ -683,21 +727,21 @@ impl ImageWindow {
     }
 
 
-    fn median_cut(&self,colors:&mut Vec<[u8;3]>) -> [MedianCut;2] {
+    fn median_cut(&self,colors:&mut Vec<([u8;3],[u32;2])>) -> [MedianCut;2] {
         // range = [max,min]
         let mut r_range:[u8;2] = [0,u8::MAX];
         let mut g_range:[u8;2] = [0,u8::MAX];
         let mut b_range:[u8;2] = [0,u8::MAX];
 
         for c in colors.iter() {
-            r_range[0] = r_range[0].max(c[0]);
-            r_range[1] = r_range[1].min(c[0]);
+            r_range[0] = r_range[0].max(c.0[0]);
+            r_range[1] = r_range[1].min(c.0[0]);
 
-            g_range[0] = g_range[0].max(c[1]);
-            g_range[1] = g_range[1].min(c[1]);
+            g_range[0] = g_range[0].max(c.0[1]);
+            g_range[1] = g_range[1].min(c.0[1]);
 
-            b_range[0] = b_range[0].max(c[2]);
-            b_range[1] = b_range[1].min(c[2]);
+            b_range[0] = b_range[0].max(c.0[2]);
+            b_range[1] = b_range[1].min(c.0[2]);
         }
         let biggest_range:usize;
 
@@ -715,13 +759,13 @@ impl ImageWindow {
         if !biggest_range < 3 {
             panic!();
         }
-        colors.sort_by(|a,b| a[biggest_range].partial_cmp(&b[biggest_range]).unwrap());
+        colors.sort_by(|a,b| a.0[biggest_range].partial_cmp(&b.0[biggest_range]).unwrap());
         let median = colors.len()/2;
         let mut top_slice = colors[0..median].to_vec();
         let mut bot_slice = colors[median..colors.len()].to_vec();
         let top_color = self.get_median_color(&mut top_slice);
         let bot_color = self.get_median_color(&mut bot_slice);
-        [MedianCut{colors:top_slice,median_color:top_color},MedianCut{colors:bot_slice,median_color:bot_color}]
+        [MedianCut{colors:top_slice,median_color:top_color.0,position:top_color.1},MedianCut{colors:bot_slice,median_color:bot_color.0,position:bot_color.1}]
     }
 
     fn scan_image_delta_e(&mut self,ui:&mut egui::Ui){
@@ -733,7 +777,7 @@ impl ImageWindow {
         let mut max_dist = f32::MIN;
         let mut min_dist = f32::MAX;
         let mut transparent_pixels:f64 = 0.0;
-        for (_x,_y,rgba) in image.pixels(){
+        for (x,y,rgba) in image.pixels(){
             if !(rgba.channels()[3]<= 0){
                 let rgb = rgba.to_rgb();
                 let mut rgb_already_registered = false;
@@ -771,11 +815,11 @@ impl ImageWindow {
                 if !rgb_already_registered {
                     self.color_percent.insert(self.color_list.len() as u32,(1.0/size)as f32);
                     self.color_pixel_count.insert(self.color_list.len() as u32, 1);
-                    self.color_list.insert(self.color_list.len() as u32,iris_color::AvarageRgb::from_rgb(rgb));
+                    self.color_list.insert(self.color_list.len() as u32,iris_color::AvarageRgb::from_rgb(rgb,[x,y]));
                 }else if let Some(cck) = closest_color_key{
                     if let Some(value) = self.color_list.get_mut(&cck){
                         if self.color_gradation > 0.0 {
-                            value.avarage_with_rgb(&rgb);
+                            value.avarage_with_rgb(&rgb,[x,y]);
                         }
                         if let Some(percent) = self.color_percent.get_mut(&cck){
                             *percent += (1.0/size) as f32;
@@ -956,7 +1000,7 @@ impl eframe::App for MyEguiApp {
                     let r = (self.color_to_add[0] * 255.0).min(255.0) as u8; 
                     let g = (self.color_to_add[1] * 255.0).min(255.0) as u8; 
                     let b = (self.color_to_add[2] * 255.0).min(255.0) as u8; 
-                    let mut color = iris_color::AvarageRgb::from_rgb(Rgb::from([r,g,b]));
+                    let mut color = iris_color::AvarageRgb::from_rgb(Rgb::from([r,g,b]),[0,0]);
                     color.generate_texture(ui);
 
                     self.global_colors.push(color);

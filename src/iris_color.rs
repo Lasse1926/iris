@@ -96,6 +96,7 @@ pub struct AvarageRgb {
     pub img_dispaly_generated:bool,
     pub marked:bool,
     pub mark_every_color:bool,
+    pub position:[u32;2],
 }
 
 impl Clone for AvarageRgb {
@@ -118,6 +119,7 @@ impl Clone for AvarageRgb {
             let img_bar = self.img_bar.clone();
             let img_dispaly_generated = self.img_dispaly_generated.clone();
             let marked = false;
+            let position = self.position;
 
             Self { 
                 r,
@@ -134,6 +136,7 @@ impl Clone for AvarageRgb {
                 img_dispaly_generated,
                 marked,
                 mark_every_color:false,
+                position,
             }
         })
     }
@@ -150,7 +153,7 @@ impl AvarageRgb {
     pub fn to_rgb(&self) -> Rgb<u8>{
         Rgb::from([self.r,self.g,self.b])
     }
-    pub fn from_rgb(rgb:Rgb<u8>) -> Self{
+    pub fn from_rgb(rgb:Rgb<u8>,position:[u32;2]) -> Self{
 
         WINDOW_ID.with(|thread_id|{
 
@@ -176,11 +179,12 @@ impl AvarageRgb {
                 img_dispaly_generated: false,
                 marked: false,
                 mark_every_color:false,
+                position,
             }
         })
     }
     pub fn switch_to_most_saturated_color(&mut self,ui: &mut egui::Ui){
-        let mut old_main = Self::from_rgb(Rgb::from([self.r,self.g,self.b])); 
+        let mut old_main = Self::from_rgb(Rgb::from([self.r,self.g,self.b]),self.position); 
         old_main.generate_texture(ui);
         self.colors.push(old_main);  
         self.colors.sort_by(|a,b|{
@@ -223,7 +227,7 @@ impl AvarageRgb {
         self.colors.push(comp.clone());
     }
 
-    pub fn avarage_with_rgb(&mut self,comp: &Rgb<u8>){
+    pub fn avarage_with_rgb(&mut self,comp: &Rgb<u8>,position:[u32;2]){
 
         let new_r = comp.channels()[0] as u32;
         let new_g = comp.channels()[1] as u32;
@@ -236,9 +240,16 @@ impl AvarageRgb {
         self.r = 254.min(((r + new_r.pow(2))/(self.color_n+1)).isqrt())as u8;
         self.g = 254.min(((g + new_g.pow(2))/(self.color_n+1)).isqrt())as u8;
         self.b = 254.min(((b + new_b.pow(2))/(self.color_n+1)).isqrt())as u8;
-        let difference = self.colors.contains(&AvarageRgb::from_rgb(*comp));
+
+        let  x = self.position[0] * self.color_n;
+        let  y = self.position[1] * self.color_n;
+
+        self.position[0] = (x + position[0])/(self.color_n+1);
+        self.position[1] = (y + position[0])/(self.color_n+1);
+
+        let difference = self.colors.contains(&AvarageRgb::from_rgb(*comp,position));
         if !difference {
-            self.colors.push(AvarageRgb::from_rgb(*comp));
+            self.colors.push(AvarageRgb::from_rgb(*comp,position));
         }
         self.color_n += 1;
 
@@ -257,6 +268,7 @@ impl AvarageRgb {
                 if self.img_rect.is_none() && self.img_bar.is_none() {
                     self.generate_color_display();
                 }
+                ui.label(format!("Image position : {} / {}",self.position[0],self.position[1]));
                 let rgb = Rgb::from([self.r,self.g,self.b]);
                 ui.label(format!("RGB : {},{},{}",self.r,self.g,self.b));
                 let hsl = HSL::from_rgb(&rgb);

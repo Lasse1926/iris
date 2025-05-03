@@ -34,10 +34,10 @@ impl ImageCreator {
             egui::Window::new("ImageCreator").id(egui::Id::new(self.id)).open(&mut window_open).show(ctx,|ui|{
                 if ui.add(egui::Button::new("gen")).clicked() {
                     let mut rect = PieColorComp::new(vec![
-                        AvarageRgb::from_rgb(Rgb::from([255,0,0])),
-                        AvarageRgb::from_rgb(Rgb::from([0,255,0])),
+                        AvarageRgb::from_rgb(Rgb::from([255,0,0]),[0,0]),
+                        AvarageRgb::from_rgb(Rgb::from([0,255,0]),[0,0]),
                         // AvarageRgb::from_rgb(Rgb::from([127,255,0])),
-                        AvarageRgb::from_rgb(Rgb::from([0,0,255]))
+                        AvarageRgb::from_rgb(Rgb::from([0,0,255]),[0,0])
                     ],64);
                     rect.generate_pie();
                     rect.save_img();
@@ -233,17 +233,17 @@ impl Draw for RGBMarker{
         for x in x_start..x_end{
             for y in 0..(parent.size[1]/4){
                 let dist = (x as f32 - rgb_pos as f32).abs();
-                if x < parent.size[0] && y < parent.size[1]/4 {
-                    if dist < (self.size/2) as f32 {
+                if x < parent.size[0] && y < parent.size[1]/2 {
+                    if dist < (self.size/4) as f32 {
                         parent.img_bar.put_pixel(x, y,self.rgb);
                     }
-                    if dist >= (self.size/2) as f32 && dist <= (self.size/2) as f32 + (self.border_size as f32/2.0) {
+                    if dist >= (self.size/4) as f32 && dist <= (self.size/4) as f32 + (self.border_size as f32/2.0) {
                         parent.img_bar.put_pixel(x, y,Rgb::from([255,255,255]));
                     }
-                    if dist > (self.size/2) as f32 + (self.border_size as f32/2.0) && dist <= (self.size/2) as f32 + self.border_size as f32 {
+                    if dist > (self.size/4) as f32 + (self.border_size as f32/2.0) && dist <= (self.size/4) as f32 + self.border_size as f32 {
                         parent.img_bar.put_pixel(x, y,Rgb::from([0,0,0]));
                     }
-                    if dist <= ((self.size/2) + self.border_size/2) as f32{
+                    if dist <= ((self.size/4) + self.border_size/2) as f32{
                         if y <= 0 + self.border_size || y >= parent.size[1]/4 -1 - self.border_size{
                             parent.img_bar.put_pixel(x, y,Rgb::from([255,255,255]));
                         }
