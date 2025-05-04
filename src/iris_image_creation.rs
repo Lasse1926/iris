@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::{f32::consts::PI,path::PathBuf};
+use std::{f32::consts::PI,path::PathBuf,collections::HashMap};
 use egui::ColorImage;
 use image::{DynamicImage, GenericImageView, Pixel, RgbaImage};
 use image::{ Rgb, RgbImage,ImageReader};
@@ -97,6 +97,7 @@ impl RGBRect {
 pub trait Draw {
     fn draw_rect(&mut self,parent:&mut HSLRect); 
     fn draw_bar(&mut self,parent:&mut HSLRect); 
+    fn draw_avarage_pos(&self,parent: &mut ImageEditor);
 }
 #[derive(Clone)]
 pub struct HSLRect{
@@ -194,12 +195,22 @@ pub struct RGBMarker {
     rgb:Rgb<u8>,
     size:u32,
     border_size:u32,
+    avarage_rgb:Option<AvarageRgb>,
 }
 
 impl RGBMarker {
     pub fn new(rgb:Rgb<u8>,size:u32,border_size:u32) -> Self{
-        Self{rgb,size,border_size} 
+        Self{rgb,size,border_size,avarage_rgb:None} 
     } 
+    pub fn from_avarage_rgb(avarage_rgb:AvarageRgb,size:u32,border_size:u32) -> Self{
+        let rgb = Rgb::from([avarage_rgb.r,avarage_rgb.g,avarage_rgb.b]);
+        Self{
+            rgb,
+            size,
+            border_size,
+            avarage_rgb:Some(avarage_rgb),
+        }
+    }
 }
 
 impl Draw for RGBMarker{
@@ -249,6 +260,31 @@ impl Draw for RGBMarker{
                         }
                         if y <= 0 + self.border_size/2 || y >= parent.size[1]/4 -1 - self.border_size/2{
                             parent.img_bar.put_pixel(x, y,Rgb::from([0,0,0]));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn draw_avarage_pos(&self,parent: &mut ImageEditor){
+        if let Some(av_rgb) = &self.avarage_rgb {
+            let rgb_pos = av_rgb.position;
+            let x_start = if let Some(val) = rgb_pos[0].checked_sub(self.size) {val} else {0};
+            let y_start = if let Some(val) = rgb_pos[1].checked_sub(self.size) {val} else {0};
+            let x_end = if let Some(val) = rgb_pos[0].checked_add(self.size) {val} else {u32::MAX};
+            let y_end = if let Some(val) = rgb_pos[1].checked_add(self.size) {val} else {u32::MAX};
+            for x in x_start..x_end{
+                for y in y_start..y_end{
+                    let dist = ((x as f32 - rgb_pos[0]as f32).powf(2.0) + (y as f32 - rgb_pos[1] as f32).powf(2.0)).sqrt();
+                    if x < parent.img_width && y < parent.img_hight {
+                        if dist < (self.size/2) as f32 {
+                            parent.img.put_pixel(x, y,self.rgb.to_rgba());
+                        }
+                        if dist >= (self.size/2) as f32 && dist <= (self.size/2) as f32 + (self.border_size as f32/2.0) {
+                            parent.img.put_pixel(x, y,Rgb::from([255,255,255]).to_rgba());
+                        }
+                        if dist > (self.size/2) as f32 + (self.border_size as f32/2.0) && dist <= (self.size/2) as f32 + self.border_size as f32 {
+                            parent.img.put_pixel(x, y,Rgb::from([0,0,0]).to_rgba());
                         }
                     }
                 }
@@ -307,6 +343,7 @@ impl PieColorComp {
 #[derive(Default,PartialEq)]
 pub enum DisplayOption {
     GrayScale(Option<egui::TextureHandle>), 
+    DefaultWithMarker(Option<egui::TextureHandle>),
     #[default]
     Default,
 }
@@ -316,6 +353,7 @@ impl Display for DisplayOption{
         match *self {
             Self::Default => write!(f,"default"),
             Self::GrayScale(..) => write!(f,"gray_scale"),
+            Self::DefaultWithMarker(..) => write!(f,"marked_default")
         }
     }
 }
@@ -327,6 +365,7 @@ pub struct ImageEditor {
     pub original_img_path:PathBuf,
     pub display_selection:DisplayOption,
     pub image_reader:DynamicImage,
+    pub markers:Vec<RGBMarker>
 }
 impl ImageEditor {
     pub fn new(path:PathBuf) -> Self{
@@ -336,6 +375,7 @@ impl ImageEditor {
         let img = RgbaImage::new(image_reader.width(),image_reader.height());
         let original_img_path = path;
         let display_selection = DisplayOption::Default;
+        let markers:Vec<RGBMarker> = vec![];
         Self{
             image_reader,
             img,
@@ -343,6 +383,7 @@ impl ImageEditor {
             img_hight,
             original_img_path,
             display_selection,
+            markers,
         }
     } 
 
@@ -360,6 +401,28 @@ impl ImageEditor {
             }
         }
         self.display_selection = DisplayOption::GrayScale(Some(ui.ctx().load_texture("color_text",ColorImage::from_rgba_premultiplied([self.img_width as usize,self.img_hight as usize],&self.img),egui::TextureOptions::NEAREST)));
+    }
+
+    pub fn generate_default_with_markers(&mut self,ui:&mut egui::Ui,img_size:[u32;2],colors:HashMap<u32,AvarageRgb>){
+        let size = (img_size[0]*img_size[1]).isqrt()/20;
+        let border_size = size/5;
+        for (_,c) in colors.iter(){
+            if c.marked {
+                let marker = RGBMarker::from_avarage_rgb(c.clone(),size,border_size);
+                self.markers.push(marker);
+            } 
+            for sub_c in c.colors.iter(){
+                if sub_c.marked {
+                    let marker = RGBMarker::from_avarage_rgb(sub_c.clone(),size,border_size);
+                    self.markers.push(marker);
+                } 
+            }
+        }
+        self.img = self.image_reader.to_rgba8();
+        for m in self.markers.clone(){
+            m.draw_avarage_pos(self);
+        }
+        self.display_selection = DisplayOption::DefaultWithMarker(Some(ui.ctx().load_texture("color_text",ColorImage::from_rgba_premultiplied([self.img_width as usize,self.img_hight as usize],&self.img),egui::TextureOptions::NEAREST)));
     }
 
     pub fn save_img(&self){

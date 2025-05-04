@@ -8,7 +8,6 @@ use eframe::egui;
 use egui::{ColorImage, DroppedFile, Vec2};
 use image::{GenericImageView, ImageReader, Pixel, Rgb};
 use itertools::Itertools;
-use nalgebra::wrap;
 
 mod iris_color;
 mod iris_image_creation;
@@ -252,10 +251,28 @@ impl ImageWindow {
                             );
                         }
                     }
+                    iris_image_creation::DisplayOption::DefaultWithMarker(texture) => {
+                        if let Some(t) = texture {
+                            ui.add(
+                                egui::Image::from_texture(&*t).shrink_to_fit()
+                            );
+                        }
+                    }
                 }
-                if ui.button("Generate_Gray_scale").clicked(){
-                    self.img_editor.generate_gray_scale_img(ui);
-                } 
+                egui::ScrollArea::horizontal().show(ui,|ui|{
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP),|ui|{
+                        if ui.button("Default").clicked(){
+                            self.img_editor.display_selection = iris_image_creation::DisplayOption::Default;
+                        }
+                        if ui.button("Generate Gray scale").clicked(){
+                            self.img_editor.generate_gray_scale_img(ui);
+                        } 
+                        if ui.button("Generate default with Markers").clicked(){
+                            self.img_editor.generate_default_with_markers(ui,self.main_img_size.clone(),self.color_list.clone());
+                        } 
+
+                    })
+                });
                 egui::ComboBox::from_label("Select Avaraging Technique")
                     .selected_text(format!("{:?}",self.avaraging_system))
                     .show_ui(ui,|ui|{

@@ -118,7 +118,7 @@ impl Clone for AvarageRgb {
             let img_rect = self.img_rect.clone();
             let img_bar = self.img_bar.clone();
             let img_dispaly_generated = self.img_dispaly_generated.clone();
-            let marked = false;
+            let marked = self.marked;
             let position = self.position;
 
             Self { 
